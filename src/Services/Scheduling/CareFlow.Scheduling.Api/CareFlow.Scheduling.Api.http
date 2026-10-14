@@ -1,0 +1,26 @@
+# Requisições de exemplo. Gere um token local com:
+#   dotnet user-jwts create --project src/Services/Scheduling/CareFlow.Scheduling.Api \
+#     --scope scheduling.write --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+@host = http://localhost:5114
+@token = cole-o-token-aqui
+@professional = 22222222-2222-2222-2222-222222222222
+
+### Reservar consulta
+POST {{host}}/v1/appointments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: exemplo-0001
+
+{
+  "professionalId": "{{professional}}",
+  "patientRef": "33333333-3333-3333-3333-333333333333",
+  "startsAt": "2030-01-15T13:00:00Z",
+  "endsAt": "2030-01-15T13:30:00Z"
+}
+
+### Horários ocupados do profissional
+GET {{host}}/v1/professionals/{{professional}}/appointments?from=2030-01-15T00:00:00Z&to=2030-01-16T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Saúde
+GET {{host}}/health/ready

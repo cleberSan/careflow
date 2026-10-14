@@ -1,0 +1,10 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[CareFlow.Scheduling.Domain]*",
+      "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
+      "excludeByFile": "**/Migrations/*.cs",
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}

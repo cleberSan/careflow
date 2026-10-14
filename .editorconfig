@@ -396,3 +396,7 @@ dotnet_diagnostic.CA1716.severity = none
 [tests/**.cs]
 # Nomes de teste no padrão Metodo_Cenario_Resultado usam sublinhado.
 dotnet_diagnostic.CA1707.severity = none
+
+[**/Migrations/*.cs]
+# Migrations são geradas pelo EF Core; analisadores e formatação não se aplicam.
+generated_code = true
