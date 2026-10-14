@@ -9,13 +9,39 @@
 
 ## Rodando localmente
 
-Pré-requisito: .NET SDK 10 (versão em `global.json`).
+Pré-requisitos: .NET SDK 10 (versão em `global.json`) e Docker (os testes de integração sobem um PostgreSQL com Testcontainers).
 
 ```bash
 dotnet restore
 dotnet format --verify-no-changes
 dotnet build -c Release
 dotnet test -c Release --coverlet --coverlet-output-format cobertura
+```
+
+Para usar um PostgreSQL já existente nos testes de integração, defina `CAREFLOW_TEST_POSTGRES` com a connection string.
+
+### Subindo a API de agenda
+
+```bash
+docker compose up -d postgres
+dotnet run --project src/Services/Scheduling/CareFlow.Scheduling.Api
+```
+
+Em desenvolvimento a API aplica as migrations na subida. Para chamar os endpoints, gere um token local (a chave fica nos user secrets, fora do repositório):
+
+```bash
+dotnet user-jwts create --project src/Services/Scheduling/CareFlow.Scheduling.Api \
+  --scope scheduling.write --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+```
+
+Há requisições de exemplo em `CareFlow.Scheduling.Api.http`.
+
+### Migrations
+
+```bash
+dotnet tool restore
+dotnet ef migrations add NomeDaMigration --project src/Services/Scheduling/CareFlow.Scheduling.Api \
+  --output-dir Infrastructure/Persistence/Migrations
 ```
 
 ## Padrões

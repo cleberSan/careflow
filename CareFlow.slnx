@@ -2,7 +2,14 @@
   <Folder Name="/src/">
     <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks/CareFlow.BuildingBlocks.csproj" />
   </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Scheduling/">
+    <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Api/CareFlow.Scheduling.Api.csproj" />
+    <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Domain/CareFlow.Scheduling.Domain.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
+    <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
   </Folder>
 </Solution>

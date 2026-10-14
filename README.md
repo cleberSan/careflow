@@ -26,7 +26,7 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 ## Roadmap
 
 - [x] **Fase 0:** padrões do repositório, CI com qualidade e segurança, ADRs iniciais
-- [ ] **Fase 2:** Scheduling MVP com prevenção de dupla reserva
+- [x] **Fase 2:** Scheduling MVP com prevenção de dupla reserva ([ADR-0002](docs/adr/0002-agenda-sem-dupla-reserva.md))
 - [ ] **Fase 3:** Patient Vault com cifragem por campo e Row-Level Security
 - [ ] **Fase 4:** Consent e Audit com Outbox/Inbox
 - [ ] **Fase 5:** Notifications com fallback e falhas injetáveis
@@ -36,6 +36,25 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [ ] **Fase 9:** Testes de carga, IaC e deploy com canary
 
 A fase 1 é o site do portfólio, no repositório [portfolio-web](https://github.com/cleberSan/portfolio-web).
+
+## Serviços disponíveis
+
+### Scheduling
+
+API de agenda em `src/Services/Scheduling`. Destaques:
+
+- **Sem dupla reserva garantida pelo banco:** exclusion constraint GiST no PostgreSQL, testada com 20 reservas simultâneas do mesmo horário.
+- **Idempotência:** `Idempotency-Key` obrigatória na criação; retentativas devolvem a mesma consulta.
+- **Multi-clínica:** clínica vinda do token, filtro global por tenant e 404 para recursos de outra clínica.
+- **Erros padronizados:** ProblemDetails (RFC 9457) com código estável e `traceId`.
+- **Observabilidade:** OpenTelemetry (traces, métricas de negócio e logs), exportado por OTLP quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido.
+
+| Método | Rota | Escopo |
+|---|---|---|
+| `POST` | `/v1/appointments` | `scheduling.write` |
+| `GET` | `/v1/appointments/{id}` | `scheduling.read` |
+| `POST` | `/v1/appointments/{id}/cancel` | `scheduling.write` |
+| `GET` | `/v1/professionals/{id}/appointments?from=&to=` | `scheduling.read` |
 
 ## Rodando localmente
 
