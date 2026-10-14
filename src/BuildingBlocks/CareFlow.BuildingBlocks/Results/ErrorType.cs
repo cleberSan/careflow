@@ -12,4 +12,6 @@ public enum ErrorType
     Conflict,
     Unauthorized,
     Forbidden,
+    PreconditionFailed,
+    PreconditionRequired,
 }

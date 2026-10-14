@@ -1,3 +1,4 @@
+using CareFlow.BuildingBlocks.AspNetCore.Http;
 using CareFlow.Scheduling.Api.Common.Http;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 using CareFlow.Scheduling.Domain.Appointments;

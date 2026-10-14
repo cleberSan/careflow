@@ -1,4 +1,4 @@
-using CareFlow.Scheduling.Api.Common.Tenancy;
+using CareFlow.BuildingBlocks.Tenancy;
 using CareFlow.Scheduling.Domain.Appointments;
 
 using Microsoft.EntityFrameworkCore;

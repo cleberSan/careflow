@@ -1,3 +1,5 @@
+using CareFlow.BuildingBlocks.Persistence;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -7,40 +9,21 @@ internal static class DatabaseExtensions
 {
     public const string ConnectionStringName = "Scheduling";
 
-    public static IServiceCollection AddSchedulingDatabase(this IServiceCollection services, IConfiguration configuration)
-    {
-        var connectionString = configuration.GetConnectionString(ConnectionStringName);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException(
-                $"Configure a connection string '{ConnectionStringName}' (variável ConnectionStrings__{ConnectionStringName}).");
-        }
+    /// <summary>Papel sem login que recebe os privilégios da API; o login da API é membro dele.</summary>
+    public const string ApplicationRole = "scheduling_app";
 
+    public static IServiceCollection AddSchedulingDatabase(this IServiceCollection services, IConfiguration configuration) =>
         // Sem retry automático no SaveChanges: um commit ambíguo seria repetido. Retentativas seguras
         // são do cliente, protegidas pela Idempotency-Key.
-        services.AddDbContext<SchedulingDbContext>(options => options
-            .UseNpgsql(connectionString)
+        services.AddTenantDbContext<SchedulingDbContext>(configuration, ConnectionStringName, options => options
             // Violações de constraint são fluxo esperado (horário ocupado) e já são tratadas no handler.
             // Falhas não tratadas continuam registradas como erro pelo middleware de exceções.
             .ConfigureWarnings(warnings => warnings.Log(
                 (CoreEventId.SaveChangesFailed, LogLevel.Debug),
                 (RelationalEventId.CommandError, LogLevel.Debug))));
-        return services;
-    }
 
-    /// <summary>
-    /// Aplica migrations na subida apenas quando habilitado (desenvolvimento e testes).
-    /// Em produção, migrations rodam como etapa do pipeline de deploy.
-    /// </summary>
-    public static async Task MigrateIfEnabledAsync(this WebApplication app)
-    {
-        if (!app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
-        {
-            return;
-        }
-
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<SchedulingDbContext>();
-        await db.Database.MigrateAsync().ConfigureAwait(false);
-    }
+    public static Task MigrateIfEnabledAsync(this WebApplication app) =>
+        app.MigrateIfEnabledAsync<SchedulingDbContext>(
+            ConnectionStringName,
+            static (options, tenant) => new SchedulingDbContext(options, tenant));
 }

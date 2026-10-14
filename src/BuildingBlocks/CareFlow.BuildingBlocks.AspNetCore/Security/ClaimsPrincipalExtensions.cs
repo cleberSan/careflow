@@ -1,8 +1,8 @@
 using System.Security.Claims;
 
-namespace CareFlow.Scheduling.Api.Common.Security;
+namespace CareFlow.BuildingBlocks.AspNetCore.Security;
 
-internal static class ClaimsPrincipalExtensions
+public static class ClaimsPrincipalExtensions
 {
     public const string TenantClaim = "tenant_id";
 
@@ -20,6 +20,8 @@ internal static class ClaimsPrincipalExtensions
     /// </summary>
     public static bool HasAnyScope(this ClaimsPrincipal user, params ReadOnlySpan<string> scopes)
     {
+        ArgumentNullException.ThrowIfNull(user);
+
         foreach (var claim in user.Claims)
         {
             if (!ScopeClaims.Contains(claim.Type, StringComparer.Ordinal))

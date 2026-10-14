@@ -2,9 +2,9 @@ using Microsoft.EntityFrameworkCore;
 
 using Npgsql;
 
-namespace CareFlow.Scheduling.Api.Infrastructure.Persistence;
+namespace CareFlow.BuildingBlocks.Persistence;
 
-internal static class DbUpdateExceptionExtensions
+public static class DbUpdateExceptionExtensions
 {
     public static bool IsExclusionViolation(this DbUpdateException exception, string constraintName) =>
         IsViolation(exception, PostgresErrorCodes.ExclusionViolation, constraintName);

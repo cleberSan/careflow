@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks.AspNetCore/CareFlow.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks.Persistence/CareFlow.BuildingBlocks.Persistence.csproj" />
     <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks/CareFlow.BuildingBlocks.csproj" />
   </Folder>
   <Folder Name="/src/Services/" />
@@ -11,5 +13,6 @@
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.Testing/CareFlow.Testing.csproj" />
   </Folder>
 </Solution>

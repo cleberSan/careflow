@@ -1,11 +1,12 @@
 using CareFlow.BuildingBlocks.Results;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.WebUtilities;
 
-namespace CareFlow.Scheduling.Api.Common.Http;
+namespace CareFlow.BuildingBlocks.AspNetCore.Http;
 
-internal static class ErrorHttpExtensions
+public static class ErrorHttpExtensions
 {
     /// <summary>Converte um erro de negócio em ProblemDetails (RFC 9457), expondo o código estável em <c>code</c>.</summary>
     public static ProblemHttpResult ToProblem(this Error error)
@@ -20,13 +21,15 @@ internal static class ErrorHttpExtensions
             extensions: new Dictionary<string, object?> { ["code"] = error.Code });
     }
 
-    internal static int StatusCodeFor(ErrorType type) => type switch
+    public static int StatusCodeFor(ErrorType type) => type switch
     {
         ErrorType.Validation => StatusCodes.Status400BadRequest,
         ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
         ErrorType.Forbidden => StatusCodes.Status403Forbidden,
         ErrorType.NotFound => StatusCodes.Status404NotFound,
         ErrorType.Conflict => StatusCodes.Status409Conflict,
+        ErrorType.PreconditionFailed => StatusCodes.Status412PreconditionFailed,
+        ErrorType.PreconditionRequired => StatusCodes.Status428PreconditionRequired,
         _ => StatusCodes.Status500InternalServerError,
     };
 }

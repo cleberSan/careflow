@@ -9,15 +9,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="Npgsql.OpenTelemetry" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.AspNetCore\CareFlow.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.Persistence\CareFlow.BuildingBlocks.Persistence.csproj" />
     <ProjectReference Include="..\CareFlow.Scheduling.Domain\CareFlow.Scheduling.Domain.csproj" />
   </ItemGroup>
 

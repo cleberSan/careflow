@@ -5,12 +5,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CareFlow.Scheduling.IntegrationTests.Infrastructure;
+namespace CareFlow.Testing;
 
 /// <summary>
 /// Substitui o JWT nos testes: a identidade vem de cabeçalhos, sem cabeçalho a requisição é anônima.
 /// </summary>
-internal sealed class TestAuthHandler(
+public sealed class TestAuthHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder)

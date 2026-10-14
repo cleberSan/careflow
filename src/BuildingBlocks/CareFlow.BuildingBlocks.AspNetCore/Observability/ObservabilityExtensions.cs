@@ -1,3 +1,8 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
 using Npgsql;
 
 using OpenTelemetry;
@@ -5,19 +10,21 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace CareFlow.Scheduling.Api.Common.Observability;
+namespace CareFlow.BuildingBlocks.AspNetCore.Observability;
 
-internal static class ObservabilityExtensions
+public static class ObservabilityExtensions
 {
-    private const string ServiceName = "careflow-scheduling";
-
     /// <summary>
     /// Traces, métricas e logs com OpenTelemetry. O exportador OTLP só é ligado quando
     /// <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> está configurado, então rodar localmente não exige coletor.
     /// </summary>
-    public static WebApplicationBuilder AddObservability(this WebApplicationBuilder builder)
+    public static WebApplicationBuilder AddCareFlowObservability(
+        this WebApplicationBuilder builder,
+        string serviceName,
+        params string[] meterNames)
     {
-        builder.Services.AddSingleton<SchedulingMetrics>();
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceName);
 
         builder.Logging.AddOpenTelemetry(logging =>
         {
@@ -26,14 +33,14 @@ internal static class ObservabilityExtensions
         });
 
         var otel = builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.AddService(ServiceName))
+            .ConfigureResource(resource => resource.AddService(serviceName))
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation(options =>
                     options.Filter = context => !context.Request.Path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase))
                 .AddNpgsql())
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
-                .AddMeter(SchedulingMetrics.MeterName));
+                .AddMeter(meterNames));
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {
