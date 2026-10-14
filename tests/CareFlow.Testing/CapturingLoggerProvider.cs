@@ -5,15 +5,15 @@ using Microsoft.Extensions.Logging;
 namespace CareFlow.Testing;
 
 /// <summary>
-/// Guarda todas as mensagens de log (em todos os níveis), com exceções e escopos, para os testes
-/// verificarem que nenhum dado pessoal chega aos logs.
+/// Guarda todas as mensagens de log (em todos os níveis), com valores estruturados, escopos e exceções,
+/// para os testes verificarem que nenhum dado pessoal chega aos logs.
 /// </summary>
 public sealed class CapturingLoggerProvider : ILoggerProvider, ISupportExternalScope
 {
-    private readonly ConcurrentQueue<string> _entries = new();
+    private readonly ConcurrentQueue<CapturedLog> _entries = new();
     private IExternalScopeProvider _scopes = new LoggerExternalScopeProvider();
 
-    public IReadOnlyCollection<string> Entries => _entries;
+    public IReadOnlyCollection<CapturedLog> Entries => _entries;
 
     public ILogger CreateLogger(string categoryName) => new CapturingLogger(this, categoryName);
 
@@ -45,8 +45,22 @@ public sealed class CapturingLoggerProvider : ILoggerProvider, ISupportExternalS
                 ? string.Join(';', pairs.Select(pair => $"{pair.Key}={pair.Value}"))
                 : string.Empty;
 
-            provider._entries.Enqueue(
-                $"{logLevel}|{category}|{formatter(state, exception)}|{values}|{string.Join(';', scopes)}|{exception}");
+            provider._entries.Enqueue(new CapturedLog(
+                logLevel,
+                category,
+                formatter(state, exception),
+                values,
+                string.Join(';', scopes),
+                exception?.ToString() ?? string.Empty));
         }
     }
+}
+
+/// <summary>Uma linha de log capturada. <see cref="ToString"/> junta todas as partes, para buscas amplas.</summary>
+public sealed record CapturedLog(LogLevel Level, string Category, string Message, string Values, string Scopes, string Exception)
+{
+    /// <summary>O que o próprio código escreveu, sem os escopos herdados do host (como o caminho da requisição).</summary>
+    public string OwnContent => $"{Message}|{Values}|{Exception}";
+
+    public override string ToString() => $"{Level}|{Category}|{Message}|{Values}|{Scopes}|{Exception}";
 }

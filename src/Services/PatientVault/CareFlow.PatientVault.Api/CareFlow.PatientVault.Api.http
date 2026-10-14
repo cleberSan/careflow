@@ -1,0 +1,47 @@
+# Requisições de exemplo, só com dados sintéticos. Gere um token local com:
+#   dotnet user-jwts create --project src/Services/PatientVault/CareFlow.PatientVault.Api \
+#     --scope "vault.read vault.write" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+@host = http://localhost:5124
+@token = cole-o-token-aqui
+@patientRef = cole-o-patientRef-aqui
+@etag = "cole-o-etag-aqui"
+
+### Cadastrar paciente (devolve só o patientRef e o ETag)
+POST {{host}}/v1/patients
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Paciente Sintético da Silva",
+  "cpf": "123.456.789-09",
+  "birthDate": "1990-05-20",
+  "email": "paciente.sintetico@example.com",
+  "phone": "+55 11 90000-0000"
+}
+
+### Ler dados pessoais (exige vault.read)
+GET {{host}}/v1/patients/{{patientRef}}
+Authorization: Bearer {{token}}
+
+### Alterar contatos (exige If-Match com o ETag lido)
+PUT {{host}}/v1/patients/{{patientRef}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+If-Match: {{etag}}
+
+{
+  "fullName": "Paciente Sintético da Silva",
+  "birthDate": "1990-05-20",
+  "email": "novo.contato@example.com",
+  "phone": null
+}
+
+### Encontrar o patientRef pelo CPF (POST para o CPF não ir na URL)
+POST {{host}}/v1/patients/lookup
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "cpf": "12345678909" }
+
+### Saúde
+GET {{host}}/health/ready
