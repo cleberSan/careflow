@@ -204,4 +204,26 @@ public sealed class ChainVerifierTests
         Assert.Equal(ChainFailure.SequenceGap, result.Failure);
         Assert.Equal(1, result.BrokenAtSequence);
     }
+
+    [Fact]
+    public void Reject_MarksHashMismatchAtThatSequence()
+    {
+        // Arrange
+        var key = ChainFixtures.NewKey();
+        var chain = ChainFixtures.BuildChain(key, 2);
+        var verifier = new ChainVerifier(_ => key);
+        verifier.Accept(chain[0]);
+
+        // Act
+        var rejected = verifier.Reject(2);
+        var again = verifier.Reject(3);
+        var result = verifier.Complete(ChainFixtures.HeadOf(chain));
+
+        // Assert
+        Assert.False(rejected);
+        Assert.False(again);
+        Assert.Equal(ChainFailure.HashMismatch, result.Failure);
+        Assert.Equal(2, result.BrokenAtSequence);
+        Assert.Equal(1, result.EntriesVerified);
+    }
 }

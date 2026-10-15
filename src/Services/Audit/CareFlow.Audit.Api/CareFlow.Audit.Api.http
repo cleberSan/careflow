@@ -1,0 +1,15 @@
+# Gere um token com: dotnet user-jwts create --project src/Services/Audit/CareFlow.Audit.Api --scope audit.read --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+@host = http://localhost:5134
+@token = cole-o-token-aqui
+
+### Trilha da clínica (primeira página)
+GET {{host}}/v1/audit/entries?limit=20
+Authorization: Bearer {{token}}
+
+### Trilha de um paciente (pseudônimo)
+GET {{host}}/v1/audit/entries?resourceId=00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Verificar a integridade da cadeia
+GET {{host}}/v1/audit/verification
+Authorization: Bearer {{token}}

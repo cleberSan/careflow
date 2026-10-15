@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>CareFlow.Audit.Api</RootNamespace>
+    <UserSecretsId>careflow-audit-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.AspNetCore\CareFlow.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.Persistence\CareFlow.BuildingBlocks.Persistence.csproj" />
+    <ProjectReference Include="..\CareFlow.Audit.Domain\CareFlow.Audit.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CareFlow.Audit.UnitTests" />
+    <InternalsVisibleTo Include="CareFlow.Audit.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

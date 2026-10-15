@@ -82,6 +82,12 @@ public sealed class ChainVerifier(Func<string, ChainKey?> keys)
     }
 
     /// <summary>
+    /// Registra uma linha que nem chega a formar um evento válido (valor que o domínio recusaria, como um
+    /// ator com quebra de linha). Só pode ter vindo de adulteração direta no banco: conta como hash inválido.
+    /// </summary>
+    public bool Reject(long sequence) => !HasFailed && Fail(ChainFailure.HashMismatch, sequence);
+
+    /// <summary>
     /// Fecha a verificação comparando a última entrada com a cabeça registrada. Sem essa comparação,
     /// apagar as últimas entradas deixaria uma cadeia menor, mas ainda válida. Sem cabeça registrada,
     /// passe <see cref="ChainHead.Genesis"/>: entradas sem cabeça também são adulteração.
