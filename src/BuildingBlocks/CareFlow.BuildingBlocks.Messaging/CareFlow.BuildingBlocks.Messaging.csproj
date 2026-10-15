@@ -17,4 +17,8 @@
     <ProjectReference Include="..\CareFlow.Contracts\CareFlow.Contracts.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CareFlow.EndToEndTests" />
+  </ItemGroup>
+
 </Project>

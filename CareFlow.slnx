@@ -31,6 +31,7 @@
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
     <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.EndToEndTests/CareFlow.EndToEndTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.IntegrationTests/CareFlow.PatientVault.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.UnitTests/CareFlow.PatientVault.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />

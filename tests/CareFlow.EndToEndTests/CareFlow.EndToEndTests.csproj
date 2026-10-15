@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Cada API tem a sua classe Program no namespace global; os aliases separam as quatro. -->
+  <ItemGroup>
+    <ProjectReference Include="..\CareFlow.Testing\CareFlow.Testing.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\CareFlow.BuildingBlocks.Messaging\CareFlow.BuildingBlocks.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\Services\PatientVault\CareFlow.PatientVault.Api\CareFlow.PatientVault.Api.csproj" Aliases="vault" />
+    <ProjectReference Include="..\..\src\Services\Consent\CareFlow.Consent.Api\CareFlow.Consent.Api.csproj" Aliases="consent" />
+    <ProjectReference Include="..\..\src\Services\Scheduling\CareFlow.Scheduling.Api\CareFlow.Scheduling.Api.csproj" Aliases="scheduling" />
+    <ProjectReference Include="..\..\src\Services\Audit\CareFlow.Audit.Api\CareFlow.Audit.Api.csproj" Aliases="audit" />
+  </ItemGroup>
+
+</Project>
