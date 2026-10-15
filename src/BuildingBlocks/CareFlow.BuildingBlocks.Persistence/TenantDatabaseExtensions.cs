@@ -76,7 +76,7 @@ public static class TenantDatabaseExtensions
         }
     }
 
-    private static string RequireConnectionString(IConfiguration configuration, string name)
+    internal static string RequireConnectionString(IConfiguration configuration, string name)
     {
         var connectionString = configuration.GetConnectionString(name);
         if (string.IsNullOrWhiteSpace(connectionString))

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.Consent.Api.Common.Observability;
@@ -58,6 +59,8 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 app.MapConsentEndpoints();
+
+app.MapDemoPurgeIfEnabled(DatabaseExtensions.ConnectionStringName, AuthorizationPolicies.DemoPurge);
 
 await app.MigrateIfEnabledAsync().ConfigureAwait(false);
 await app.RunAsync().ConfigureAwait(false);

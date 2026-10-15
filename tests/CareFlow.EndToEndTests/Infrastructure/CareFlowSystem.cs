@@ -100,7 +100,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("Notifications:Resilience:TotalTimeout", "00:00:05"),
             ("Notifications:Resilience:RetryBaseDelay", "00:00:00.050"),
             ("FaultInjection:Enabled", "true"),
-            ("FaultInjection:Channels:whatsapp:Mode", "Unavailable"));
+            ("FaultInjection:Channels:whatsapp:Mode", "Unavailable"),
+            ("FaultInjection:ClinicOverridesEnabled", "true"),
+            ("FaultInjection:IsolatedSlots", "8"));
 
         // Eventos publicados antes de a fila do consumidor existir iriam para a fila de não roteados.
         await Broker.WaitForQueuesAsync("careflow.scheduling", "careflow.audit", "careflow.notifications");
@@ -137,6 +139,7 @@ public sealed class CareFlowSystem : IAsyncLifetime
             builder.UseSetting($"ConnectionStrings:{spec.ConnectionStringName}Relay", relay.ConnectionString);
             builder.UseSetting("ConnectionStrings:RabbitMq", brokerUri);
             builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
+            builder.UseSetting("Demo:PurgeEnabled", "true");
             builder.UseSetting("Messaging:Enabled", "true");
             builder.UseSetting("Messaging:RelayPollInterval", "00:00:00.200");
             builder.UseSetting("Messaging:MaxRetryDelay", "00:00:02");
