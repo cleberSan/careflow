@@ -10,7 +10,8 @@ public sealed record AppointmentResponse(
     DateTimeOffset EndsAt,
     AppointmentStatus Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? CancelledAt)
+    DateTimeOffset? CancelledAt,
+    CancellationReason? CancellationReason)
 {
     public static AppointmentResponse From(Appointment appointment)
     {
@@ -24,6 +25,7 @@ public sealed record AppointmentResponse(
             appointment.EndsAt,
             appointment.Status,
             appointment.CreatedAt,
-            appointment.CancelledAt);
+            appointment.CancelledAt,
+            appointment.CancellationReason);
     }
 }

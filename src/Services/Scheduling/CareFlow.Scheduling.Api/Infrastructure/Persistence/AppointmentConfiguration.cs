@@ -20,6 +20,7 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
         {
             table.HasCheckConstraint("ck_appointments_interval", "ends_at > starts_at");
             table.HasCheckConstraint("ck_appointments_status", "status IN ('Booked', 'Cancelled')");
+            table.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked')");
         });
 
         builder.HasKey(a => a.Id).HasName("pk_appointments");
@@ -32,6 +33,7 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
         builder.Property(a => a.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16);
         builder.Property(a => a.CreatedAt).HasColumnName("created_at");
         builder.Property(a => a.CancelledAt).HasColumnName("cancelled_at");
+        builder.Property(a => a.CancellationReason).HasColumnName("cancellation_reason").HasConversion<string>().HasMaxLength(32);
         builder.Property(a => a.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(64);
         builder.Property(a => a.RequestFingerprint).HasColumnName("request_fingerprint").HasMaxLength(64).IsFixedLength();
 
@@ -44,5 +46,10 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
 
         builder.HasIndex(a => new { a.TenantId, a.ProfessionalId, a.StartsAt })
             .HasDatabaseName("ix_appointments_tenant_professional_starts_at");
+
+        // Revogação: consultas futuras e ativas de um paciente.
+        builder.HasIndex(a => new { a.TenantId, a.PatientRef, a.StartsAt })
+            .HasDatabaseName("ix_appointments_tenant_patient_starts_at")
+            .HasFilter("status = 'Booked'");
     }
 }

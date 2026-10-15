@@ -1,6 +1,10 @@
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Messaging.Outbox;
 using CareFlow.BuildingBlocks.Persistence;
 using CareFlow.BuildingBlocks.Results;
+using CareFlow.Contracts.Patients;
+using CareFlow.PatientVault.Api.Common;
 using CareFlow.PatientVault.Api.Common.Http;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Cryptography;
@@ -19,7 +23,7 @@ internal sealed partial class RegisterPatientHandler(
     VaultMetrics metrics,
     ILogger<RegisterPatientHandler> logger)
 {
-    public async Task<Result<PatientRecord>> HandleAsync(RegisterPatientRequest request, CancellationToken cancellationToken)
+    public async Task<Result<PatientRecord>> HandleAsync(RegisterPatientRequest request, string actor, CancellationToken cancellationToken)
     {
         var cpf = Cpf.Create(request.Cpf);
         if (cpf.IsFailure)
@@ -39,6 +43,10 @@ internal sealed partial class RegisterPatientHandler(
         var record = PatientProtector.Protect(Guid.NewGuid(), data.Value, key, now);
         db.Patients.Add(record);
 
+        // Na mesma transação do cadastro: a agenda passa a conhecer o pseudônimo e a auditoria registra quem cadastrou.
+        db.Enqueue(record.TenantId, new PatientRegistered(record.PatientRef, now), now);
+        db.Record(record.TenantId, record.PatientRef, actor, VaultAudit.Registered, now);
+
         try
         {
             // Unicidade garantida pelo índice único (clínica, blind index), sem consulta prévia sujeita a corrida.
@@ -46,7 +54,8 @@ internal sealed partial class RegisterPatientHandler(
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation(PatientRecordConfiguration.CpfIndexConstraint))
         {
-            db.Entry(record).State = EntityState.Detached;
+            // Descarta o cadastro e os eventos dele: nada foi gravado.
+            db.ChangeTracker.Clear();
             metrics.Duplicate();
             LogDuplicate(logger);
             return PatientErrors.DuplicateCpf;
@@ -73,7 +82,7 @@ internal static class RegisterPatientEndpoint
         HttpResponse response,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(request, AuditActor.From(response.HttpContext.User), cancellationToken).ConfigureAwait(false);
         if (result.IsFailure)
         {
             return result.Error.ToProblem();

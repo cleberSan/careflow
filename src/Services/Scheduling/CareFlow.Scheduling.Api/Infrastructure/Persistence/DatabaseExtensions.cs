@@ -12,6 +12,11 @@ internal static class DatabaseExtensions
     /// <summary>Papel sem login que recebe os privilégios da API; o login da API é membro dele.</summary>
     public const string ApplicationRole = "scheduling_app";
 
+    /// <summary>Papel do despachante do Outbox e da limpeza do Inbox; não acessa a agenda.</summary>
+    public const string RelayRole = "scheduling_relay";
+
+    public const string RelayConnectionStringName = "SchedulingRelay";
+
     public static IServiceCollection AddSchedulingDatabase(this IServiceCollection services, IConfiguration configuration) =>
         // Sem retry automático no SaveChanges: um commit ambíguo seria repetido. Retentativas seguras
         // são do cliente, protegidas pela Idempotency-Key.

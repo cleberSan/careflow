@@ -1,5 +1,7 @@
+using CareFlow.BuildingBlocks.Messaging.Persistence;
 using CareFlow.BuildingBlocks.Tenancy;
 using CareFlow.Scheduling.Domain.Appointments;
+using CareFlow.Scheduling.Domain.Patients;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +12,8 @@ internal sealed class SchedulingDbContext(DbContextOptions<SchedulingDbContext> 
 {
     public DbSet<Appointment> Appointments => Set<Appointment>();
 
+    public DbSet<PatientStatus> PatientStatuses => Set<PatientStatus>();
+
     // Avaliado a cada consulta: toda leitura fica restrita à clínica do token.
     private Guid CurrentTenantId => tenant.TenantId;
 
@@ -17,6 +21,10 @@ internal sealed class SchedulingDbContext(DbContextOptions<SchedulingDbContext> 
     {
         modelBuilder.HasPostgresExtension("btree_gist");
         modelBuilder.ApplyConfiguration(new AppointmentConfiguration());
+        modelBuilder.ApplyConfiguration(new PatientStatusConfiguration());
         modelBuilder.Entity<Appointment>().HasQueryFilter(appointment => appointment.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PatientStatus>().HasQueryFilter(patient => patient.TenantId == CurrentTenantId);
+        modelBuilder.AddOutbox(() => CurrentTenantId);
+        modelBuilder.AddInbox(() => CurrentTenantId);
     }
 }

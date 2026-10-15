@@ -3,6 +3,7 @@ using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -31,9 +32,11 @@ public static class TenantDatabaseExtensions
         services.TryAddScoped<TenantSessionInterceptor>();
         services.AddDbContext<TContext>((provider, options) =>
         {
+            // Interceptores extras registrados como IInterceptor (por exemplo, o sinal do Outbox) entram em todo contexto.
             options
                 .UseNpgsql(connectionString)
-                .AddInterceptors(provider.GetRequiredService<TenantSessionInterceptor>());
+                .AddInterceptors(provider.GetRequiredService<TenantSessionInterceptor>())
+                .AddInterceptors(provider.GetServices<IInterceptor>());
             configure?.Invoke(options);
         });
 

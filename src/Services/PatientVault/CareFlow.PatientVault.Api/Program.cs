@@ -1,5 +1,6 @@
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
+using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Common.Security;
 using CareFlow.PatientVault.Api.Cryptography;
@@ -40,6 +41,11 @@ builder.Services.AddScoped<TenantKeyRing>();
 builder.Services.AddVaultDatabase(builder.Configuration);
 
 builder.Services.AddPatientFeatures();
+
+// O cofre só publica: cadastro de paciente para a agenda e acessos para a auditoria.
+builder.Services
+    .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
+    .AddOutbox();
 
 var app = builder.Build();
 

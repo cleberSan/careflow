@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.AspNetCore\CareFlow.BuildingBlocks.AspNetCore.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.Persistence\CareFlow.BuildingBlocks.Persistence.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.Messaging\CareFlow.BuildingBlocks.Messaging.csproj" />
     <ProjectReference Include="..\CareFlow.Scheduling.Domain\CareFlow.Scheduling.Domain.csproj" />
   </ItemGroup>
 

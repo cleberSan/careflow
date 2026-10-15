@@ -1,5 +1,8 @@
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Messaging.Outbox;
 using CareFlow.BuildingBlocks.Results;
+using CareFlow.Scheduling.Api.Common;
 using CareFlow.Scheduling.Api.Common.Http;
 using CareFlow.Scheduling.Api.Common.Observability;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
@@ -16,7 +19,7 @@ internal sealed partial class CancelAppointmentHandler(
     SchedulingMetrics metrics,
     ILogger<CancelAppointmentHandler> logger)
 {
-    public async Task<Result<Appointment>> HandleAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<Appointment>> HandleAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
         var appointment = await db.Appointments
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
@@ -27,11 +30,15 @@ internal sealed partial class CancelAppointmentHandler(
             return AppointmentErrors.NotFound;
         }
 
-        var cancellation = appointment.Cancel(time.GetUtcNow());
+        var now = time.GetUtcNow();
+        var cancellation = appointment.Cancel(now);
         if (cancellation.IsFailure)
         {
             return cancellation.Error;
         }
+
+        db.RecordAccess(
+            appointment.TenantId, SchedulingAudit.SourceService, actor, "appointment.cancelled", SchedulingAudit.ResourceType, appointment.PatientRef, now);
 
         try
         {
@@ -56,9 +63,10 @@ internal static class CancelAppointmentEndpoint
     public static async Task<Results<Ok<AppointmentResponse>, ProblemHttpResult>> HandleAsync(
         Guid id,
         CancelAppointmentHandler handler,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(id, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(id, AuditActor.From(httpContext.User), cancellationToken).ConfigureAwait(false);
 
         return result.IsSuccess
             ? TypedResults.Ok(AppointmentResponse.From(result.Value))

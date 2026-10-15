@@ -4,7 +4,19 @@
     <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks.Persistence/CareFlow.BuildingBlocks.Persistence.csproj" />
     <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks/CareFlow.BuildingBlocks.csproj" />
   </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/CareFlow.BuildingBlocks.Messaging/CareFlow.BuildingBlocks.Messaging.csproj" />
+    <Project Path="src/BuildingBlocks/CareFlow.Contracts/CareFlow.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Audit/">
+    <Project Path="src/Services/Audit/CareFlow.Audit.Api/CareFlow.Audit.Api.csproj" />
+    <Project Path="src/Services/Audit/CareFlow.Audit.Domain/CareFlow.Audit.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Consent/">
+    <Project Path="src/Services/Consent/CareFlow.Consent.Api/CareFlow.Consent.Api.csproj" />
+    <Project Path="src/Services/Consent/CareFlow.Consent.Domain/CareFlow.Consent.Domain.csproj" />
+  </Folder>
   <Folder Name="/src/Services/PatientVault/">
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Api/CareFlow.PatientVault.Api.csproj" />
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Domain/CareFlow.PatientVault.Domain.csproj" />
@@ -14,7 +26,12 @@
     <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Domain/CareFlow.Scheduling.Domain.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/CareFlow.Audit.IntegrationTests/CareFlow.Audit.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Audit.UnitTests/CareFlow.Audit.UnitTests.csproj" />
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
+    <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.EndToEndTests/CareFlow.EndToEndTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.IntegrationTests/CareFlow.PatientVault.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.UnitTests/CareFlow.PatientVault.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />

@@ -1,5 +1,7 @@
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
 using CareFlow.BuildingBlocks.Results;
+using CareFlow.PatientVault.Api.Common;
 using CareFlow.PatientVault.Api.Common.Http;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Cryptography;
@@ -24,6 +26,7 @@ internal sealed partial class UpdatePatientHandler(
         Guid patientRef,
         UpdatePatientRequest request,
         uint expectedVersion,
+        string actor,
         CancellationToken cancellationToken)
     {
         var record = await db.Patients
@@ -53,6 +56,7 @@ internal sealed partial class UpdatePatientHandler(
         // Regrava com a chave atual da clínica: quando houver rotação de DEK, cada alteração já migra o registro.
         var key = await keys.GetOrCreateCurrentAsync(cancellationToken).ConfigureAwait(false);
         PatientProtector.Apply(record, data.Value, key, now);
+        db.Record(record.TenantId, record.PatientRef, actor, VaultAudit.Updated, now);
 
         // A versão esperada vira a original do EF: se outra alteração gravar entre a leitura e o UPDATE,
         // o banco não encontra a linha com esse xmin e a gravação falha em vez de sobrescrever.
@@ -63,6 +67,7 @@ internal sealed partial class UpdatePatientHandler(
         }
         catch (DbUpdateConcurrencyException)
         {
+            db.ChangeTracker.Clear();
             LogConcurrentUpdate(logger);
             return PatientErrors.StaleVersion;
         }
@@ -92,7 +97,7 @@ internal static class UpdatePatientEndpoint
             return version.Error.ToProblem();
         }
 
-        var result = await handler.HandleAsync(patientRef, request, version.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(patientRef, request, version.Value, AuditActor.From(response.HttpContext.User), cancellationToken).ConfigureAwait(false);
         if (result.IsFailure)
         {
             return result.Error.ToProblem();

@@ -40,16 +40,56 @@ public sealed class PostgresTestServer : IAsyncDisposable
     /// Gera nome, senha aleatória e connection string de um login da API. O login em si só é criado por
     /// <see cref="CreateLoginAsync"/>, depois que as migrations criaram o papel da aplicação.
     /// </summary>
-    public ApplicationLogin NewApplicationLogin(string name)
+    public ApplicationLogin NewApplicationLogin(string name, string? database = null)
     {
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
-        var connectionString = new NpgsqlConnectionStringBuilder(AdminConnectionString)
+        var builder = new NpgsqlConnectionStringBuilder(AdminConnectionString)
         {
             Username = name,
             Password = password,
-        }.ConnectionString;
+        };
+        if (database is not null)
+        {
+            builder.Database = database;
+        }
 
-        return new ApplicationLogin(name, password, connectionString);
+        return new ApplicationLogin(name, password, builder.ConnectionString);
+    }
+
+    /// <summary>
+    /// Cria um banco (um por serviço, como em produção) e devolve a connection string de admin dele. Logins e
+    /// papéis são do servidor, então valem em todos os bancos.
+    /// </summary>
+    public async Task<string> CreateDatabaseAsync(string database)
+    {
+        await using var connection = new NpgsqlConnection(AdminConnectionString);
+        await connection.OpenAsync();
+
+        EnsureIdentifier(database);
+        await using var command = new NpgsqlCommand($"CREATE DATABASE \"{database}\"", connection);
+        await command.ExecuteNonQueryAsync();
+
+        return new NpgsqlConnectionStringBuilder(AdminConnectionString) { Database = database }.ConnectionString;
+    }
+
+    /// <summary>Cria um papel sem login, se ainda não existir (as migrations também o criam, de forma idempotente).</summary>
+    public async Task EnsureRoleAsync(string role)
+    {
+        EnsureIdentifier(role);
+        await using var connection = new NpgsqlConnection(AdminConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{role}') THEN
+                    CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS;
+                END IF;
+            END
+            $$;
+            """,
+            connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>Cria (ou atualiza a senha de) um login sem privilégios, membro do papel da aplicação.</summary>
@@ -76,6 +116,15 @@ public sealed class PostgresTestServer : IAsyncDisposable
             """,
             connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    // Nomes são constantes dos testes; o formato restrito impede SQL arbitrário.
+    private static void EnsureIdentifier(string name)
+    {
+        if (string.IsNullOrEmpty(name) || !name.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_'))
+        {
+            throw new ArgumentException($"Identificador inválido: '{name}'.", nameof(name));
+        }
     }
 
     public async ValueTask DisposeAsync()

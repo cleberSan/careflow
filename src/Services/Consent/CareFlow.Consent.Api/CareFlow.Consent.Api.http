@@ -1,0 +1,20 @@
+# Gere um token com: dotnet user-jwts create --project src/Services/Consent/CareFlow.Consent.Api --scope "consent.read consent.write" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+# Use o patientRef devolvido pelo Patient Vault (dados sintéticos).
+@host = http://localhost:5144
+@token = cole-o-token-aqui
+@patientRef = 00000000-0000-0000-0000-000000000000
+
+### Conceder a finalidade de agendamento
+PUT {{host}}/v1/patients/{{patientRef}}/consents/scheduling
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "legalBasis": "specific-consent", "termVersion": "2026-10" }
+
+### Situação do paciente
+GET {{host}}/v1/patients/{{patientRef}}/consents
+Authorization: Bearer {{token}}
+
+### Revogar (propaga ConsentRevoked; a agenda cancela as consultas futuras)
+POST {{host}}/v1/patients/{{patientRef}}/consents/scheduling/revoke
+Authorization: Bearer {{token}}
