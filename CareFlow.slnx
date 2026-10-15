@@ -14,6 +14,7 @@
     <Project Path="src/Services/Audit/CareFlow.Audit.Domain/CareFlow.Audit.Domain.csproj" />
   </Folder>
   <Folder Name="/src/Services/Consent/">
+    <Project Path="src/Services/Consent/CareFlow.Consent.Api/CareFlow.Consent.Api.csproj" />
     <Project Path="src/Services/Consent/CareFlow.Consent.Domain/CareFlow.Consent.Domain.csproj" />
   </Folder>
   <Folder Name="/src/Services/PatientVault/">
@@ -28,6 +29,7 @@
     <Project Path="tests/CareFlow.Audit.IntegrationTests/CareFlow.Audit.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Audit.UnitTests/CareFlow.Audit.UnitTests.csproj" />
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
+    <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.IntegrationTests/CareFlow.PatientVault.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.UnitTests/CareFlow.PatientVault.UnitTests.csproj" />
