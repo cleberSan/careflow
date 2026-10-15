@@ -1,7 +1,8 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "include": "[CareFlow.BuildingBlocks.Messaging]*",
+      "include": "[CareFlow.BuildingBlocks.Messaging]*,[CareFlow.Demo.Api]*,[CareFlow.BuildingBlocks.Persistence]CareFlow.BuildingBlocks.Persistence.Demo.*",
+      "exclude": "[CareFlow.Demo.Api]CareFlow.Demo.Api.Telemetry.GrafanaStackReader*,[CareFlow.Demo.Api]CareFlow.Demo.Api.Telemetry.OtlpJson*,[CareFlow.Demo.Api]CareFlow.Demo.Api.Telemetry.UnavailableTelemetryReader,[CareFlow.Demo.Api]CareFlow.Demo.Api.Services.DemoTokenIssuer",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

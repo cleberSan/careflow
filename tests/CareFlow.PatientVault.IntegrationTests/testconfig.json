@@ -2,6 +2,7 @@
   "platformOptions": {
     "Coverlet": {
       "include": "[CareFlow.PatientVault.Api]*,[CareFlow.BuildingBlocks.AspNetCore]*,[CareFlow.BuildingBlocks.Persistence]*",
+      "exclude": "[CareFlow.BuildingBlocks.Persistence]CareFlow.BuildingBlocks.Persistence.Demo.*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

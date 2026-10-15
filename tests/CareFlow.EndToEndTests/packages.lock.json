@@ -889,6 +889,14 @@
       "careflow.contracts": {
         "type": "Project"
       },
+      "careflow.demo.api": {
+        "type": "Project",
+        "dependencies": {
+          "CareFlow.BuildingBlocks.AspNetCore": "[1.0.0, )",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
+          "Microsoft.Extensions.Http.Resilience": "[10.11.0, )"
+        }
+      },
       "careflow.notifications.api": {
         "type": "Project",
         "dependencies": {

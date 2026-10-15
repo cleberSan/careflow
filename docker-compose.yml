@@ -66,6 +66,9 @@ services:
     image: grafana/loki:3.5.5
     profiles: ["observability"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
+    # Exposto no loopback para o Demo ler os logs de um trace (ADR-0010).
+    ports:
+      - "127.0.0.1:3100:3100"
     volumes:
       - careflow-loki:/loki
 

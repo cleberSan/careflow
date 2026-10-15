@@ -1,0 +1,48 @@
+# Requisições de exemplo do Painel (ADR-0010). A sessão é o cookie __Host-careflow-demo, que o cliente HTTP
+# guarda depois de abrir a sessão; toda chamada leva o cabeçalho anti-CSRF. Dados só sintéticos.
+@host = https://localhost:7067
+@traceId = cole-o-trace-id-aqui
+
+### Abrir sessão (clínica e paciente sintéticos novos)
+POST {{host}}/demo/v1/sessions
+X-CareFlow-Demo: 1
+
+### Reservar uma consulta (devolve o trace id)
+POST {{host}}/demo/v1/appointments
+X-CareFlow-Demo: 1
+
+### O mesmo paciente em cada serviço
+GET {{host}}/demo/v1/patient
+X-CareFlow-Demo: 1
+
+### Trace distribuído de uma ação da sessão
+GET {{host}}/demo/v1/traces/{{traceId}}
+X-CareFlow-Demo: 1
+
+### Logs do mesmo trace
+GET {{host}}/demo/v1/traces/{{traceId}}/logs
+X-CareFlow-Demo: 1
+
+### Derrubar o WhatsApp só nesta sessão
+PUT {{host}}/demo/v1/channels/whatsapp/fault
+X-CareFlow-Demo: 1
+
+### Canais e circuit breaker da sessão
+GET {{host}}/demo/v1/channels
+X-CareFlow-Demo: 1
+
+### Trazer o WhatsApp de volta
+DELETE {{host}}/demo/v1/channels/whatsapp/fault
+X-CareFlow-Demo: 1
+
+### Revogar o consentimento para agendamento
+POST {{host}}/demo/v1/consents/scheduling/revoke
+X-CareFlow-Demo: 1
+
+### Propagação: consultas, avisos e trilha de auditoria
+GET {{host}}/demo/v1/propagation
+X-CareFlow-Demo: 1
+
+### Encerrar a sessão (os dados da clínica são apagados)
+DELETE {{host}}/demo/v1/session
+X-CareFlow-Demo: 1

@@ -1,5 +1,6 @@
 extern alias audit;
 extern alias consent;
+extern alias demo;
 extern alias notifications;
 extern alias scheduling;
 extern alias vault;
@@ -53,6 +54,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
 
     public ServiceHost Notifications { get; private set; } = null!;
 
+    /// <summary>O backend do Painel, falando com os cinco serviços como faria fora dos testes.</summary>
+    public WebApplicationFactory<demo::Program> Demo { get; private set; } = null!;
+
     public BrokerProbe Broker { get; private set; } = null!;
 
     public async ValueTask InitializeAsync()
@@ -65,8 +69,8 @@ public sealed class CareFlowSystem : IAsyncLifetime
 
         using var serviceTokenKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        // O cofre roda em Kestrel de verdade: o Notifications chama por HTTP com o SocketsHttpHandler, que é quem
-        // propaga o traceparent e cria o span de cliente, como em produção.
+        // Todos rodam em Kestrel de verdade: quem chama outro serviço (Notifications no cofre, o Demo em todos) usa
+        // o SocketsHttpHandler, que é quem propaga o traceparent e cria o span de cliente, como em produção.
         Vault = await StartAsync<vault::Program>(
             new ServiceSpec("patient-vault", "PatientVault", "careflow_vault", "vault_app", "vault_relay"),
             brokerUri,
@@ -101,16 +105,74 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("Notifications:Resilience:RetryBaseDelay", "00:00:00.050"),
             ("FaultInjection:Enabled", "true"),
             ("FaultInjection:Channels:whatsapp:Mode", "Unavailable"),
+            ("Notifications:Resilience:BreakDuration", "00:00:03"),
             ("FaultInjection:ClinicOverridesEnabled", "true"),
-            ("FaultInjection:IsolatedSlots", "8"));
+            ("FaultInjection:IsolatedSlots", "16"));
 
         // Eventos publicados antes de a fila do consumidor existir iriam para a fila de não roteados.
         await Broker.WaitForQueuesAsync("careflow.scheduling", "careflow.audit", "careflow.notifications");
+
+        Demo = StartDemo();
+    }
+
+    /// <summary>
+    /// Sobe uma instância do Demo ligada aos serviços deste sistema. Os serviços autenticam pelos cabeçalhos de
+    /// teste (no lugar do token HS256 local) e os traces vêm do que foi exportado aqui (no lugar do Tempo).
+    /// </summary>
+    public WebApplicationFactory<demo::Program> StartDemo(params (string Key, string Value)[] overrides)
+    {
+        var hosts = new Dictionary<string, ServiceHost>(StringComparer.Ordinal)
+        {
+            ["vault"] = Vault,
+            ["consent"] = Consent,
+            ["scheduling"] = Scheduling,
+            ["notifications"] = Notifications,
+            ["audit"] = Audit,
+        };
+
+        var factory = new WebApplicationFactory<demo::Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("Demo:Tokens:SigningKey", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+            builder.UseSetting("Demo:SessionLifetime", "00:05:00");
+            builder.UseSetting("Demo:Slots", "8");
+            builder.UseSetting("Demo:SlotCooldown", "00:00:00");
+            builder.UseSetting("Demo:CleanupInterval", "00:00:00.300");
+            builder.UseSetting("Demo:EligibilityWait", "00:00:20");
+            builder.UseSetting("Demo:WhatsAppFaultDuration", "00:02:00");
+            builder.UseSetting("Demo:AllowedOrigins:0", DemoClient.SiteOrigin);
+            builder.UseSetting("Demo:RateLimits:SessionsPerWindow", "1000");
+            builder.UseSetting("Demo:RateLimits:RequestsPerMinute", "1000");
+            foreach (var (name, host) in hosts)
+            {
+                builder.UseSetting($"Demo:Services:{char.ToUpperInvariant(name[0])}{name[1..]}", host.BaseAddress!.ToString());
+            }
+
+            foreach (var (key, value) in overrides)
+            {
+                builder.UseSetting(key, value);
+            }
+
+            builder.ConfigureLogging(logging => logging
+                .AddProvider(Logs)
+                .AddFilter<CapturingLoggerProvider>(null, LogLevel.Trace));
+            builder.ConfigureTestServices(services =>
+            {
+                Telemetry.Attach(services, "careflow-demo");
+                services.AddSingleton<demo::CareFlow.Demo.Api.Services.IServiceAuthenticator, TestHeadersAuthenticator>();
+                services.AddSingleton<demo::CareFlow.Demo.Api.Telemetry.ITelemetryReader>(new SinkTelemetryReader(Telemetry));
+            });
+        });
+        _factories.Add(factory);
+        TelemetrySink.CurrentService.Value = "careflow-demo";
+        factory.StartServer();
+        TelemetrySink.CurrentService.Value = null;
+        return factory;
     }
 
     private Task<ServiceHost> StartAsync<TProgram>(ServiceSpec spec, string brokerUri, params (string Key, string Value)[] settings)
         where TProgram : class =>
-        StartAsync<TProgram>(spec, brokerUri, kestrel: false, configureServices: null, settings);
+        StartAsync<TProgram>(spec, brokerUri, kestrel: true, configureServices: null, settings);
 
     private async Task<ServiceHost> StartAsync<TProgram>(
         ServiceSpec spec,
@@ -156,7 +218,7 @@ public sealed class CareFlowSystem : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddTestAuthentication();
-                Telemetry.Attach(services);
+                Telemetry.Attach(services, "careflow-" + spec.ServiceName);
                 configureServices?.Invoke(services);
             });
         });
@@ -167,8 +229,11 @@ public sealed class CareFlowSystem : IAsyncLifetime
             factory.UseKestrel(options => options.Listen(System.Net.IPAddress.Loopback, 0));
         }
 
-        // Sobe o host: aplica as migrations (com o admin do banco) e inicia despachante e consumidor.
+        // Sobe o host: aplica as migrations (com o admin do banco) e inicia despachante e consumidor. O que ele
+        // começa em segundo plano (despachante, consumidor, envios) fica no contexto deste serviço.
+        TelemetrySink.CurrentService.Value = "careflow-" + spec.ServiceName;
         factory.StartServer();
+        TelemetrySink.CurrentService.Value = null;
         Telemetry.Track(factory.Services.GetService<MeterProvider>());
         Uri? baseAddress = null;
         if (kestrel)
@@ -177,7 +242,10 @@ public sealed class CareFlowSystem : IAsyncLifetime
             baseAddress = new Uri(address.Replace("[::]", "localhost", StringComparison.Ordinal).TrimEnd('/') + "/");
         }
 
-        return new ServiceHost(spec, factory.CreateClient, adminConnectionString, factory.Services) { BaseAddress = baseAddress };
+        return new ServiceHost(spec, factory.CreateClient, adminConnectionString, factory.Services)
+        {
+            BaseAddress = baseAddress,
+        };
     }
 
     public async ValueTask DisposeAsync()
