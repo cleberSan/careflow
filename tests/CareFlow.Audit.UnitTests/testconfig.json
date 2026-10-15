@@ -1,0 +1,10 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[CareFlow.Audit.Domain]*",
+      "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
+      "excludeByFile": "**/Migrations/*.cs",
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}
