@@ -1,5 +1,6 @@
 ﻿using System;
 
+using CareFlow.BuildingBlocks.Messaging.Persistence;
 using CareFlow.BuildingBlocks.Persistence.RowLevelSecurity;
 
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -55,6 +56,21 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
                     table.CheckConstraint("ck_audit_entries_sequence", "sequence > 0");
                 });
 
+            migrationBuilder.CreateTable(
+                name: "inbox_messages",
+                columns: table => new
+                {
+                    consumer = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    message_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    type = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    processed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_inbox_messages", x => new { x.consumer, x.message_id });
+                });
+
             migrationBuilder.CreateIndex(
                 name: "ix_audit_entries_tenant_resource_sequence",
                 table: "audit_entries",
@@ -65,6 +81,11 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
                 table: "audit_entries",
                 columns: new[] { "tenant_id", "message_id" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inbox_messages_processed_at",
+                table: "inbox_messages",
+                column: "processed_at");
 
             // Append-only no próprio banco: UPDATE, DELETE e TRUNCATE são recusados para qualquer papel, inclusive
             // o dono. Só quem desliga o gatilho (dono do schema) consegue alterar, e a cadeia de hash denuncia.
@@ -91,11 +112,13 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
             migrationBuilder.EnsureApplicationRole(DatabaseExtensions.ApplicationRole);
             migrationBuilder.EnableTenantRowLevelSecurity(AuditEntryConfiguration.TableName, DatabaseExtensions.ApplicationRole, "SELECT, INSERT");
             migrationBuilder.EnableTenantRowLevelSecurity(ChainHeadConfiguration.TableName, DatabaseExtensions.ApplicationRole, "SELECT, INSERT, UPDATE");
+            migrationBuilder.EnableInboxSecurity(DatabaseExtensions.ApplicationRole, DatabaseExtensions.RelayRole);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DisableMessagingSecurity(MessagingModelBuilderExtensions.InboxTable, DatabaseExtensions.ApplicationRole, DatabaseExtensions.RelayRole);
             migrationBuilder.DisableTenantRowLevelSecurity(ChainHeadConfiguration.TableName, DatabaseExtensions.ApplicationRole);
             migrationBuilder.DisableTenantRowLevelSecurity(AuditEntryConfiguration.TableName, DatabaseExtensions.ApplicationRole);
             migrationBuilder.Sql(
@@ -110,6 +133,9 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "audit_entries");
+
+            migrationBuilder.DropTable(
+                name: "inbox_messages");
         }
     }
 }

@@ -1,3 +1,4 @@
+using CareFlow.BuildingBlocks.Messaging.Persistence;
 using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.EntityFrameworkCore;
@@ -20,5 +21,6 @@ internal sealed class AuditDbContext(DbContextOptions<AuditDbContext> options, I
         modelBuilder.ApplyConfiguration(new ChainHeadConfiguration());
         modelBuilder.Entity<AuditEntryRecord>().HasQueryFilter(entry => entry.TenantId == CurrentTenantId);
         modelBuilder.Entity<ChainHeadRecord>().HasQueryFilter(head => head.TenantId == CurrentTenantId);
+        modelBuilder.AddInbox(() => CurrentTenantId);
     }
 }

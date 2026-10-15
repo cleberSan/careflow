@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AuditDbContext))]
-    [Migration("20261015022321_InitialAudit")]
+    [Migration("20261015023737_InitialAudit")]
     partial class InitialAudit
     {
         /// <inheritdoc />
@@ -137,6 +137,40 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_audit_chain_heads_sequence", "sequence >= 0");
                         });
+                });
+
+            modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Inbox.InboxMessage", b =>
+                {
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("consumer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Consumer", "MessageId")
+                        .HasName("pk_inbox_messages");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_inbox_messages_processed_at");
+
+                    b.ToTable("inbox_messages", (string)null);
                 });
 #pragma warning restore 612, 618
         }

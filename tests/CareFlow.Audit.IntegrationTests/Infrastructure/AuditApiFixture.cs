@@ -46,6 +46,7 @@ public sealed class AuditApiFixture : IAsyncLifetime
             builder.UseSetting("ConnectionStrings:Audit", _login.ConnectionString);
             builder.UseSetting("ConnectionStrings:AuditMigrations", _postgres.AdminConnectionString);
             builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
+            builder.UseSetting("Messaging:Enabled", "false");
             builder.UseSetting("Audit:Chain:ActiveKeyId", "test-1");
             builder.UseSetting("Audit:Chain:Keys:test-1", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
             builder.ConfigureLogging(logging => logging

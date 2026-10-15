@@ -6,6 +6,7 @@ using CareFlow.BuildingBlocks.Persistence;
 using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CareFlow.Audit.Api.Features.Entries;
 
@@ -41,8 +42,11 @@ internal sealed partial class AuditWriter(
         var now = time.GetUtcNow();
         var genesis = ChainHead.Genesis.Hash;
 
-        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using (transaction.ConfigureAwait(false))
+        // No consumidor, o Inbox já abriu a transação (o registro do Inbox e a entrada são gravados juntos).
+        var ownTransaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
+            : null;
+        try
         {
             await db.Database.ExecuteSqlAsync(
                 $"""
@@ -63,7 +67,7 @@ internal sealed partial class AuditWriter(
                 .ConfigureAwait(false);
             if (alreadyRecorded)
             {
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                await CommitAsync(ownTransaction, cancellationToken).ConfigureAwait(false);
                 metrics.Duplicate();
                 LogDuplicate(logger, auditEvent.Action);
                 return AppendOutcome.Duplicate;
@@ -76,13 +80,23 @@ internal sealed partial class AuditWriter(
             head.UpdatedAt = entry.RecordedAt;
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await CommitAsync(ownTransaction, cancellationToken).ConfigureAwait(false);
 
             metrics.Appended(auditEvent.Action);
             LogAppended(logger, entry.Sequence, auditEvent.Action, auditEvent.SourceService);
             return AppendOutcome.Appended;
         }
+        finally
+        {
+            if (ownTransaction is not null)
+            {
+                await ownTransaction.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
+
+    private static Task CommitAsync(IDbContextTransaction? transaction, CancellationToken cancellationToken) =>
+        transaction?.CommitAsync(cancellationToken) ?? Task.CompletedTask;
 
     // Sem ator, pseudônimo ou clínica nos logs: a trilha completa mora só na tabela de auditoria.
     [LoggerMessage(EventId = 3001, Level = LogLevel.Information, Message = "Auditoria: entrada {Sequence} gravada ({Action} vindo de {SourceService})")]

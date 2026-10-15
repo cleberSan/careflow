@@ -2,9 +2,12 @@ using CareFlow.Audit.Api.Chain;
 using CareFlow.Audit.Api.Common.Observability;
 using CareFlow.Audit.Api.Common.Security;
 using CareFlow.Audit.Api.Features;
+using CareFlow.Audit.Api.Features.Messaging;
 using CareFlow.Audit.Api.Infrastructure.Persistence;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
+using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.Contracts.Auditing;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -37,6 +40,11 @@ builder.Services.AddSingleton<ChainKeyRing>();
 builder.Services.AddAuditDatabase(builder.Configuration);
 
 builder.Services.AddAuditFeatures();
+
+// A auditoria só consome: grava na cadeia os acessos que os outros serviços publicam.
+builder.Services
+    .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
+    .AddConsumer<AuditDbContext>(consumers => consumers.Handle<DataAccessRecorded, DataAccessRecordedConsumer>());
 
 var app = builder.Build();
 
