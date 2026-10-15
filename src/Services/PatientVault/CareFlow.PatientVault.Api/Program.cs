@@ -1,7 +1,7 @@
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
-using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Common.Security;
 using CareFlow.PatientVault.Api.Cryptography;

@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
-using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Contracts.Appointments;
 using CareFlow.Contracts.Consents;
 using CareFlow.Notifications.Api.Channels;

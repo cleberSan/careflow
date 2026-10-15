@@ -1,9 +1,9 @@
 using System.Text.Json.Serialization;
 
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
-using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Consent.Api.Common.Observability;
 using CareFlow.Consent.Api.Common.Security;
 using CareFlow.Consent.Api.Features.Consents;
