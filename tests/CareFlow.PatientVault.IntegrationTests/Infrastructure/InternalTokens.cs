@@ -21,10 +21,11 @@ internal sealed class InternalTokens : IDisposable
         string issuer = InternalServiceAuthentication.DefaultIssuer,
         string audience = InternalServiceAuthentication.Audience,
         TimeSpan? lifetime = null,
-        ECDsa? signingKey = null)
+        ECDsa? signingKey = null,
+        string subject = "careflow-notifications")
     {
         var now = DateTime.UtcNow;
-        var claims = new Dictionary<string, object> { ["sub"] = "careflow-notifications", ["scope"] = scope };
+        var claims = new Dictionary<string, object> { ["sub"] = subject, ["scope"] = scope };
         if (tenantId is not null)
         {
             claims["tenant_id"] = tenantId.Value.ToString();

@@ -3,6 +3,7 @@ extern alias consent;
 extern alias demo;
 extern alias notifications;
 extern alias scheduling;
+extern alias triage;
 extern alias vault;
 
 using System.Security.Cryptography;
@@ -28,7 +29,7 @@ namespace CareFlow.EndToEndTests.Infrastructure;
 
 /// <summary>
 /// O sistema inteiro num processo: PostgreSQL e RabbitMQ reais (Testcontainers), um banco por serviço e os
-/// cinco serviços com mensageria ligada, cada um com o login da API e o do despachante, sem superusuário.
+/// seis serviços com mensageria ligada, cada um com o login da API e o do despachante, sem superusuário.
 /// Os logs de todos os serviços são capturados para conferir que nenhum carrega dado pessoal.
 /// O Notifications lê o contato no cofre por HTTP (o cofre roda em Kestrel) com token de serviço
 /// ES256 de verdade, e sobe com o WhatsApp derrubado por falha injetada: o fallback é o caminho normal aqui.
@@ -53,6 +54,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
     public ServiceHost Audit { get; private set; } = null!;
 
     public ServiceHost Notifications { get; private set; } = null!;
+
+    /// <summary>Triagem com IA reproduzindo as respostas gravadas do modelo (<c>eval/triage/recordings</c>, ADR-0011).</summary>
+    public ServiceHost Triage { get; private set; } = null!;
 
     /// <summary>O backend do Painel, falando com os cinco serviços como faria fora dos testes.</summary>
     public WebApplicationFactory<demo::Program> Demo { get; private set; } = null!;
@@ -109,8 +113,18 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("FaultInjection:ClinicOverridesEnabled", "true"),
             ("FaultInjection:IsolatedSlots", "16"));
 
+        // O Triage lê idade e nome no cofre com o mesmo par de chaves de serviço (um por serviço em produção) e
+        // nunca chama a rede para o modelo: só reproduz as gravações versionadas.
+        Triage = await StartAsync<triage::Program>(
+            new ServiceSpec("triage", "Triage", "careflow_triage", "triage_app", "triage_relay"),
+            brokerUri,
+            ("Vault:BaseAddress", Vault.BaseAddress!.ToString()),
+            ("ServiceTokens:Local:PrivateKey", Convert.ToBase64String(serviceTokenKey.ExportPkcs8PrivateKey())),
+            ("Triage:Model:Provider", "Recorded"),
+            ("Triage:Model:RecordingsPath", RepositoryPaths.TriageRecordings));
+
         // Eventos publicados antes de a fila do consumidor existir iriam para a fila de não roteados.
-        await Broker.WaitForQueuesAsync("careflow.scheduling", "careflow.audit", "careflow.notifications");
+        await Broker.WaitForQueuesAsync("careflow.scheduling", "careflow.audit", "careflow.notifications", "careflow.triage");
 
         Demo = StartDemo();
     }
@@ -128,6 +142,7 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ["scheduling"] = Scheduling,
             ["notifications"] = Notifications,
             ["audit"] = Audit,
+            ["triage"] = Triage,
         };
 
         var factory = new WebApplicationFactory<demo::Program>().WithWebHostBuilder(builder =>
@@ -281,6 +296,29 @@ public sealed class CareFlowSystem : IAsyncLifetime
 public static class SequentialFlows
 {
     public const string Name = "sistema-completo";
+}
+
+/// <summary>Caminhos do repositório, achados a partir da saída do build (a raiz tem o <c>CareFlow.slnx</c>).</summary>
+public static class RepositoryPaths
+{
+    public static string Root { get; } = FindRoot();
+
+    public static string TriageCases => Path.Combine(Root, "eval", "triage", "cases.json");
+
+    public static string TriageRecordings => Path.Combine(Root, "eval", "triage", "recordings");
+
+    private static string FindRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "CareFlow.slnx")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        throw new InvalidOperationException("Raiz do repositório (CareFlow.slnx) não encontrada.");
+    }
 }
 
 public sealed record ServiceSpec(string ServiceName, string ConnectionStringName, string Database, string ApplicationRole, string RelayRole);

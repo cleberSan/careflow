@@ -44,7 +44,9 @@ builder.Services.AddAuditFeatures();
 // A auditoria só consome: grava na cadeia os acessos que os outros serviços publicam.
 builder.Services
     .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
-    .AddConsumer<AuditDbContext>(consumers => consumers.Handle<DataAccessRecorded, DataAccessRecordedConsumer>());
+    .AddConsumer<AuditDbContext>(consumers => consumers
+        .Handle<DataAccessRecorded, DataAccessRecordedConsumer>()
+        .Handle<ContentDisclosed, ContentDisclosedConsumer>());
 
 var app = builder.Build();
 

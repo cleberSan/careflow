@@ -41,3 +41,9 @@ public sealed record PatientContactResponse(string? Email, string? Phone)
 {
     public override string ToString() => "PatientContactResponse { *** }";
 }
+
+/// <summary>O mínimo para a triagem: idade em anos (não a data) e o nome, só para mascarar a queixa.</summary>
+public sealed record TriageProfileResponse(int Age, string FullName)
+{
+    public override string ToString() => "TriageProfileResponse { *** }";
+}

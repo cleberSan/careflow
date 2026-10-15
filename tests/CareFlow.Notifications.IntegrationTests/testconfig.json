@@ -1,7 +1,7 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "include": "[CareFlow.Notifications.Api]*",
+      "include": "[CareFlow.Notifications.Api]*,[CareFlow.BuildingBlocks.AspNetCore]CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens.*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens;
 using CareFlow.BuildingBlocks.Diagnostics;
 using CareFlow.Notifications.Api.Common.Observability;
 
@@ -32,6 +33,9 @@ internal sealed partial class VaultContactDirectory(
     ILogger<VaultContactDirectory> logger) : IContactDirectory
 {
     public const string ClientName = "vault-contacts";
+
+    /// <summary>Token só para o cofre e só com o escopo de leitura de contato.</summary>
+    public static readonly ServiceTokenGrant Grant = new("careflow-notifications", "careflow-patient-vault", "vault.contact.read");
 
     public async Task<ContactLookup> FindAsync(Guid tenantId, Guid patientRef, CancellationToken cancellationToken)
     {

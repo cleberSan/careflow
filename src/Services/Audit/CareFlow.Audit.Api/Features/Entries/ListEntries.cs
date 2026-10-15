@@ -15,7 +15,8 @@ public sealed record AuditEntryResponse(
     string Actor,
     string Action,
     string ResourceType,
-    Guid ResourceId);
+    Guid ResourceId,
+    string? ContentDigest);
 
 /// <summary>Página da trilha. <see cref="NextAfter"/> é o cursor da próxima página, nulo na última.</summary>
 public sealed record AuditEntryPage(AuditEntryResponse[] Items, long? NextAfter);
@@ -54,13 +55,34 @@ internal static class ListEntriesEndpoint
         var rows = await query
             .OrderBy(e => e.Sequence)
             .Take(size + 1)
-            .Select(e => new AuditEntryResponse(
-                e.Sequence, e.OccurredAt, e.RecordedAt, e.SourceService, e.Actor, e.Action, e.ResourceType, e.ResourceId))
+            .Select(e => new
+            {
+                e.Sequence,
+                e.OccurredAt,
+                e.RecordedAt,
+                e.SourceService,
+                e.Actor,
+                e.Action,
+                e.ResourceType,
+                e.ResourceId,
+                e.ContentDigest,
+            })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         var hasMore = rows.Count > size;
-        var items = hasMore ? rows[..size] : rows;
+        var items = (hasMore ? rows[..size] : rows)
+            .Select(e => new AuditEntryResponse(
+                e.Sequence,
+                e.OccurredAt,
+                e.RecordedAt,
+                e.SourceService,
+                e.Actor,
+                e.Action,
+                e.ResourceType,
+                e.ResourceId,
+                e.ContentDigest is null ? null : Convert.ToHexStringLower(e.ContentDigest)))
+            .ToList();
         response.Headers.CacheControl = "no-store";
         return TypedResults.Ok(new AuditEntryPage([.. items], hasMore ? items[^1].Sequence : null));
     }

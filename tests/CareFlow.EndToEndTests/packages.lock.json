@@ -150,6 +150,11 @@
           "Microsoft.Extensions.Logging": "10.0.13"
         }
       },
+      "Microsoft.Extensions.AI.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.5.1",
+        "contentHash": "nB0l3IlsVbNeUxsE7nZNb9GY8rP1OSeqpj0pseORPejt474HNKEauTWTLdSJPkSvPlRMxowZNMo6nyp7APAiSg=="
+      },
       "Microsoft.Extensions.AmbientMetadata.Application": {
         "type": "Transitive",
         "resolved": "10.11.0",
@@ -847,6 +852,7 @@
         "type": "Project",
         "dependencies": {
           "CareFlow.BuildingBlocks": "[1.0.0, )",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
           "Npgsql.OpenTelemetry": "[10.0.3, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.19.1, )",
           "OpenTelemetry.Extensions.Hosting": "[1.19.1, )",
@@ -955,6 +961,34 @@
           "Microsoft.AspNetCore.Mvc.Testing": "[10.0.13, )",
           "Npgsql": "[10.0.3, )",
           "Testcontainers.PostgreSql": "[4.16.0, )"
+        }
+      },
+      "careflow.triage.api": {
+        "type": "Project",
+        "dependencies": {
+          "Anthropic": "[12.57.0, )",
+          "CareFlow.BuildingBlocks.AspNetCore": "[1.0.0, )",
+          "CareFlow.BuildingBlocks.Messaging": "[1.0.0, )",
+          "CareFlow.BuildingBlocks.Persistence": "[1.0.0, )",
+          "CareFlow.Triage.Domain": "[1.0.0, )",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
+          "Microsoft.AspNetCore.OpenApi": "[10.0.13, )",
+          "Microsoft.Extensions.Http.Resilience": "[10.11.0, )"
+        }
+      },
+      "careflow.triage.domain": {
+        "type": "Project",
+        "dependencies": {
+          "CareFlow.BuildingBlocks": "[1.0.0, )"
+        }
+      },
+      "Anthropic": {
+        "type": "CentralTransitive",
+        "requested": "[12.57.0, )",
+        "resolved": "12.57.0",
+        "contentHash": "Q1kBW0WirUdgFzz71/e0D4E+FYP38TLU2Kn6S9/9hzgmvfx/BkoaAZED7xxzOjta97XGIxeB+g55klkxzpIc+g==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.5.1"
         }
       },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {

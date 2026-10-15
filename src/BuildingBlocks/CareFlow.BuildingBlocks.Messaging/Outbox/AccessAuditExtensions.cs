@@ -21,4 +21,20 @@ public static class AccessAuditExtensions
         Guid resourceId,
         DateTimeOffset now) =>
         db.Enqueue(tenantId, new DataAccessRecorded(sourceService, actor, action, resourceType, resourceId, now), now);
+
+    /// <summary>
+    /// Como <see cref="RecordAccess"/>, para ações que enviam conteúdo para fora: a trilha recebe também o SHA-256
+    /// do que saiu (<see cref="ContentDisclosed"/>), nunca o conteúdo.
+    /// </summary>
+    public static void RecordDisclosure(
+        this DbContext db,
+        Guid tenantId,
+        string sourceService,
+        string actor,
+        string action,
+        string resourceType,
+        Guid resourceId,
+        string contentDigest,
+        DateTimeOffset now) =>
+        db.Enqueue(tenantId, new ContentDisclosed(sourceService, actor, action, resourceType, resourceId, contentDigest, now), now);
 }

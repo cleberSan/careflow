@@ -2,7 +2,7 @@
   "platformOptions": {
     "Coverlet": {
       "include": "[CareFlow.Audit.Api]*,[CareFlow.BuildingBlocks.AspNetCore]*,[CareFlow.BuildingBlocks.Persistence]*",
-      "exclude": "[CareFlow.BuildingBlocks.Persistence]CareFlow.BuildingBlocks.Persistence.Demo.*",
+      "exclude": "[CareFlow.BuildingBlocks.Persistence]CareFlow.BuildingBlocks.Persistence.Demo.*,[CareFlow.BuildingBlocks.AspNetCore]CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens.*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

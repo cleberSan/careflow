@@ -28,6 +28,10 @@ internal static class DemoEndpoints
 
     public static readonly Error TraceNotFound = Error.NotFound("Demo.TraceIndisponivel", "Trace não encontrado para esta sessão (ainda chegando ou fora do prazo de retenção).");
 
+    public static readonly Error TriageLimit = Error.Conflict("Demo.LimiteDeTriagens", "Esta sessão já fez o máximo de triagens. Comece uma nova sessão.");
+
+    public static readonly Error TriageNotFound = Error.NotFound("Demo.TriagemNaoEncontrada", "Triagem não encontrada nesta sessão.");
+
     private static readonly Guid Professional = Guid.Parse(ProfessionalSeed);
 
     public static IEndpointRouteBuilder MapDemoEndpoints(this IEndpointRouteBuilder app)
@@ -44,6 +48,10 @@ internal static class DemoEndpoints
         session.MapPost("/appointments", BookAsync);
         session.MapGet("/patient", PatientAsync);
         session.MapPost("/consents/scheduling/revoke", RevokeAsync);
+        session.MapPost("/consents/ai-triage/revoke", RevokeAiTriageAsync);
+        session.MapGet("/triage-consent", AiConsentAsync);
+        session.MapPost("/triages", SubmitTriageAsync);
+        session.MapPost("/triages/{id:guid}/review", ReviewTriageAsync);
         session.MapGet("/propagation", PropagationAsync);
         session.MapGet("/channels", ChannelsAsync);
         session.MapPut("/channels/whatsapp/fault", DropWhatsAppAsync);
@@ -150,6 +158,89 @@ internal static class DemoEndpoints
         return TypedResults.Ok(new ActionView(traceId));
     }
 
+    /// <summary>Revoga só a triagem com IA: as próximas queixas não saem da clínica, a agenda segue igual.</summary>
+    public static async Task<Ok<ActionView>> RevokeAiTriageAsync(HttpContext http, CareFlowServices services, CancellationToken cancellationToken)
+    {
+        var session = http.Session();
+        using var activity = SessionLifecycle.ActivitySource.StartActivity("demo revoke ai-triage consent");
+        var traceId = Track(session);
+        await services.RevokeAsync(session.Clinic, session.PatientRef, "ai-triage", cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new ActionView(traceId));
+    }
+
+    public static async Task<Ok<AiConsentView>> AiConsentAsync(HttpContext http, CareFlowServices services, CancellationToken cancellationToken)
+    {
+        var session = http.Session();
+        var consent = await services.AiConsentAsync(session.Clinic, session.PatientRef, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AiConsentView(consent.State, consent.Version));
+    }
+
+    /// <summary>
+    /// Envia a queixa para a triagem em nome do paciente da sessão. Logo depois de a sessão abrir, o Triage pode
+    /// ainda não conhecer o consentimento (ele chega por evento): o Demo espera a projeção sair de <c>unknown</c>,
+    /// como faz com a agenda, para a primeira triagem não ficar sem IA só por ter chegado antes do evento. Se o
+    /// prazo vencer, envia assim mesmo e o Triage segue só com as regras, o que o Painel mostra.
+    /// </summary>
+    public static async Task<Results<Ok<TriageView>, ProblemHttpResult>> SubmitTriageAsync(
+        TriageRequestBody body,
+        HttpContext http,
+        CareFlowServices services,
+        IOptions<DemoOptions> options,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var session = http.Session();
+        if (!session.TryReserveTriage(options.Value.MaxTriagesPerSession))
+        {
+            return TriageLimit.ToProblem();
+        }
+
+        using var activity = SessionLifecycle.ActivitySource.StartActivity("demo submit triage");
+        var traceId = Track(session);
+        var deadline = time.GetUtcNow() + options.Value.EligibilityWait;
+        while ((await services.AiConsentAsync(session.Clinic, session.PatientRef, cancellationToken).ConfigureAwait(false)).State == "unknown"
+               && time.GetUtcNow() < deadline)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), time, cancellationToken).ConfigureAwait(false);
+        }
+
+        var outcome = await services.SubmitTriageAsync(session.Clinic, session.PatientRef, body?.Complaint, cancellationToken).ConfigureAwait(false);
+        if (outcome.Triage is not { } triage)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            return Refusal(outcome);
+        }
+
+        session.AddTriage(triage.Id);
+        return TypedResults.Ok(View(triage, traceId));
+    }
+
+    /// <summary>O profissional confirma ou corrige; só triagens criadas pela própria sessão.</summary>
+    public static async Task<Results<Ok<TriageView>, ProblemHttpResult>> ReviewTriageAsync(
+        Guid id,
+        TriageReviewBody body,
+        HttpContext http,
+        CareFlowServices services,
+        CancellationToken cancellationToken)
+    {
+        var session = http.Session();
+        if (!session.OwnsTriage(id))
+        {
+            return TriageNotFound.ToProblem();
+        }
+
+        using var activity = SessionLifecycle.ActivitySource.StartActivity("demo review triage");
+        var traceId = Track(session);
+        var outcome = await services.ReviewTriageAsync(session.Clinic, id, body?.Decision, body?.Priority, cancellationToken).ConfigureAwait(false);
+        if (outcome.Triage is not { } triage)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            return Refusal(outcome);
+        }
+
+        return TypedResults.Ok(View(triage, traceId));
+    }
+
     public static async Task<Ok<PropagationView>> PropagationAsync(HttpContext http, CareFlowServices services, CancellationToken cancellationToken)
     {
         var session = http.Session();
@@ -161,7 +252,7 @@ internal static class DemoEndpoints
         return TypedResults.Ok(new PropagationView(
             appointments,
             notifications,
-            [.. audit.Select(e => new AuditEntryView(e.Sequence, e.OccurredAt, e.SourceService, e.Action, e.ResourceType))],
+            [.. audit.Select(e => new AuditEntryView(e.Sequence, e.OccurredAt, e.SourceService, e.Action, e.ResourceType, e.ContentDigest))],
             new ChainView(chain.Intact, chain.EntriesVerified, chain.LastSequence)));
     }
 
@@ -220,6 +311,27 @@ internal static class DemoEndpoints
 
     private static SessionView View(DemoSession session, DemoOptions options) =>
         new(session.ExpiresAt, $"isolated-{session.Slot:00}", session.PatientRef, session.Appointments.Count, options.MaxBookingsPerSession);
+
+    private static TriageView View(TriageRecord t, string traceId) =>
+        new(t.Id, t.Complaint, t.AgeBand, t.SentToModel, t.PromptDigest, t.PromptVersion, t.ModelName, t.ModelStatus, t.ModelPriority,
+            t.SuggestedPriority, t.Source, t.Rationale, t.Guardrails, t.AlarmSigns, t.Masks, t.Decision, t.FinalPriority, t.ReviewedAt, traceId);
+
+    /// <summary>Recusa do Triage com o código dele (queixa inválida, revisão repetida, limite da clínica).</summary>
+    private static ProblemHttpResult Refusal(TriageOutcome outcome)
+    {
+        if (outcome.Status == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            return TypedResults.Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Muitas triagens agora. Tente de novo em instantes.", extensions: new Dictionary<string, object?> { ["code"] = outcome.RefusalCode });
+        }
+
+        var error = outcome.Status switch
+        {
+            System.Net.HttpStatusCode.Conflict => Error.Conflict(outcome.RefusalCode!, "A triagem recusou a revisão."),
+            System.Net.HttpStatusCode.NotFound => Error.NotFound(outcome.RefusalCode!, "A triagem não encontrou o paciente ou a triagem."),
+            _ => Error.Validation(outcome.RefusalCode!, "A triagem recusou o pedido."),
+        };
+        return error.ToProblem();
+    }
 
     private static string Track(DemoSession session)
     {

@@ -99,6 +99,26 @@ dotnet user-jwts create --project src/Services/Notifications/CareFlow.Notificati
 
 Os provedores são simulados: as mensagens ficam em memória, nada sai da máquina. Para ver o fallback, ligue a falha injetada no `appsettings.Development.json` (`FaultInjection:Enabled` e o modo do canal: `Latency`, `Error`, `Unavailable` ou `LostResponse`); a mudança vale sem reiniciar.
 
+### Subindo o Triage
+
+O Triage lê idade e nome no cofre (só para mascarar a queixa) com o mesmo tipo de token de serviço do Notifications. Use a mesma chave privada gerada acima, ou gere outro par e troque a pública do cofre; em produção cada serviço terá o seu par (fase 9).
+
+```bash
+dotnet user-secrets set "ServiceTokens:Local:PrivateKey" "<a mesma chave privada em Base64>" \
+  --project src/Services/Triage/CareFlow.Triage.Api
+dotnet run --project src/Services/Triage/CareFlow.Triage.Api
+dotnet user-jwts create --project src/Services/Triage/CareFlow.Triage.Api \
+  --scope "triage.submit triage.review" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+```
+
+O modelo padrão é `Fake`: regras determinísticas, nenhuma chamada de rede. Para reproduzir as respostas gravadas do Claude, use `Triage:Model:Provider=Recorded` e `Triage:Model:RecordingsPath` apontando para `eval/triage/recordings` (ADR-0011). Para chamar o modelo de verdade localmente, `Triage:Model:Provider=Anthropic` com a chave em `ANTHROPIC_API_KEY` (variável de ambiente ou user secret, nunca em arquivo versionado); `Triage:Model:MaxCalls` limita as chamadas por processo. A queixa só sai do serviço depois de mascarada, e só para pacientes com o consentimento `ai-triage` (base legal `specific-consent`).
+
+### Avaliação da triagem e gravação das respostas
+
+`tests/CareFlow.Triage.Evaluation` roda os casos sintéticos de `eval/triage/cases.json` contra as gravações e publica as métricas (acerto, alarmes nunca rebaixados, injeções barradas, recusas) em `CAREFLOW_TRIAGE_EVALUATION`. O CI nunca chama o modelo: casos sem gravação contam como modelo indisponível e só as regras de alarme e de injeção são cobradas.
+
+Para gravar ou regravar as respostas (depois de mudar instruções, schema, casos ou mascaramento, porque o nome de cada gravação é o SHA-256 do pedido exato), rode o workflow **Gravar respostas da triagem** (`triage-recordings.yml`) pelo Actions, ou ponha o rótulo `gravar-triagem` num PR do próprio repositório. Ele precisa do secret `ANTHROPIC_API_KEY` no repositório, chama o Claude Haiku 5.5 no máximo `max_calls` vezes e publica as gravações como artefato. Revise o artefato (cada gravação mostra o caso pseudonimizado que saiu), copie os arquivos para `eval/triage/recordings` e faça commit. Deixe um limite de gasto mensal configurado no console da Anthropic.
+
 ### Observabilidade local
 
 Collector, Tempo, Loki, Prometheus e Grafana sobem num perfil à parte do compose, só no loopback (ADR-0010):
@@ -119,7 +139,7 @@ O Demo é o BFF do Painel de Privacidade e Resiliência (ADR-0010): cria uma cl�
 ```bash
 DEMO_KEY="$(openssl rand -base64 32)"
 dotnet user-secrets set "Demo:Tokens:SigningKey" "$DEMO_KEY" --project src/Services/Demo/CareFlow.Demo.Api
-for service in PatientVault Consent Scheduling Notifications Audit; do
+for service in PatientVault Consent Scheduling Notifications Audit Triage; do
   project="src/Services/$service/CareFlow.$service.Api"
   dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Issuer" "careflow-demo-local" --project "$project"
   dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Value" "$DEMO_KEY" --project "$project"
@@ -134,7 +154,7 @@ O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o
 
 ### Gravação do Painel
 
-O site não chama o Demo: ele reproduz uma gravação real dos quatro cenários. O teste `PanelRecordingTests` grava o arquivo quando a variável `CAREFLOW_PANEL_RECORDING` aponta para um caminho; o CI publica o resultado como artefato `panel-recording`.
+O site não chama o Demo: ele reproduz uma gravação real dos cinco cenários (o da triagem usa as respostas gravadas do modelo, ADR-0011). O teste `PanelRecordingTests` grava o arquivo quando a variável `CAREFLOW_PANEL_RECORDING` aponta para um caminho; o CI publica o resultado como artefato `panel-recording`.
 
 ```bash
 CAREFLOW_PANEL_RECORDING=$PWD/panel.json CAREFLOW_COMMIT=$(git rev-parse HEAD) \

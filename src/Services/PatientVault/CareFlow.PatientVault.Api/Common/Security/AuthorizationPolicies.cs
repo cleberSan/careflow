@@ -11,10 +11,12 @@ internal static class AuthorizationPolicies
     public const string ReadScope = "vault.read";
     public const string WriteScope = "vault.write";
     public const string ContactReadScope = "vault.contact.read";
+    public const string TriageProfileReadScope = "vault.triage-profile.read";
 
     public const string Read = "Vault.Read";
     public const string Write = "Vault.Write";
     public const string ContactRead = "Vault.ContactRead";
+    public const string TriageProfileRead = "Vault.TriageProfileRead";
 
     // Só existe no ambiente de demonstração (Demo:PurgeEnabled): o serviço Demo apaga a clínica sintética da sessão.
     public const string DemoPurge = "Demo.Purge";
@@ -26,12 +28,17 @@ internal static class AuthorizationPolicies
             .AddTenantScopePolicy(DemoPurge, DemoPurgeEndpoint.Scope)
             .AddTenantScopePolicy(Read, ReadScope)
             .AddTenantScopePolicy(Write, WriteScope)
-            // Contato é o mínimo para avisar o paciente, com escopo próprio: quem só envia avisos não lê o
-            // cadastro inteiro. É a única política que aceita o token de serviço interno.
-            .AddPolicy(ContactRead, policy => policy
-                .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme, InternalServiceAuthentication.SchemeName)
-                .RequireAuthenticatedUser()
-                .RequireAssertion(context =>
-                    ClaimsPrincipalExtensions.TryGetTenantId(context.User, out _)
-                    && context.User.HasAnyScope(ContactReadScope)));
+            // Contato e perfil de triagem são o mínimo de cada serviço, com escopo próprio: quem só envia avisos
+            // não lê o cadastro inteiro, e a triagem não lê contato. São as únicas políticas que aceitam o token
+            // de serviço interno.
+            .AddServicePolicy(ContactRead, ContactReadScope)
+            .AddServicePolicy(TriageProfileRead, TriageProfileReadScope);
+
+    private static AuthorizationBuilder AddServicePolicy(this AuthorizationBuilder builder, string name, string scope) =>
+        builder.AddPolicy(name, policy => policy
+            .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme, InternalServiceAuthentication.SchemeName)
+            .RequireAuthenticatedUser()
+            .RequireAssertion(context =>
+                ClaimsPrincipalExtensions.TryGetTenantId(context.User, out _)
+                && context.User.HasAnyScope(scope)));
 }

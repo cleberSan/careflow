@@ -5,12 +5,14 @@ namespace CareFlow.Audit.Domain.Chain;
 /// <summary>
 /// Um acesso ou alteração a registrar: quem (<see cref="Actor"/>), o quê (<see cref="Action"/> sobre
 /// <see cref="ResourceType"/>/<see cref="ResourceId"/>), quando e em qual serviço. Nunca carrega dados
-/// pessoais do paciente, só o pseudônimo no <see cref="ResourceId"/>.
+/// pessoais do paciente, só o pseudônimo no <see cref="ResourceId"/>. Quando o serviço precisa provar o que
+/// enviou para fora (a triagem, por exemplo), <see cref="ContentDigest"/> leva só o SHA-256 desse conteúdo.
 /// </summary>
 public sealed record AuditEvent
 {
     public const int MaxCodeLength = 64;
     public const int MaxActorLength = 128;
+    public const int ContentDigestSize = 32;
 
     private AuditEvent(
         Guid tenantId,
@@ -20,7 +22,8 @@ public sealed record AuditEvent
         string actor,
         string action,
         string resourceType,
-        Guid resourceId)
+        Guid resourceId,
+        string? contentDigest)
     {
         TenantId = tenantId;
         MessageId = messageId;
@@ -30,6 +33,7 @@ public sealed record AuditEvent
         Action = action;
         ResourceType = resourceType;
         ResourceId = resourceId;
+        ContentDigest = contentDigest;
     }
 
     public Guid TenantId { get; }
@@ -50,6 +54,12 @@ public sealed record AuditEvent
 
     public Guid ResourceId { get; }
 
+    /// <summary>
+    /// SHA-256, em hexadecimal minúsculo, do conteúdo que o serviço enviou para fora, quando houver. Entra no
+    /// hash encadeado. É só o resumo: o conteúdo em si fica no serviço de origem, que pode apagá-lo.
+    /// </summary>
+    public string? ContentDigest { get; }
+
     public static Result<AuditEvent> Create(
         Guid tenantId,
         Guid messageId,
@@ -58,7 +68,8 @@ public sealed record AuditEvent
         string? actor,
         string? action,
         string? resourceType,
-        Guid resourceId)
+        Guid resourceId,
+        string? contentDigest = null)
     {
         if (tenantId == Guid.Empty || messageId == Guid.Empty || resourceId == Guid.Empty)
         {
@@ -75,6 +86,11 @@ public sealed record AuditEvent
             return AuditErrors.InvalidActor;
         }
 
+        if (contentDigest is not null && !IsDigest(contentDigest))
+        {
+            return AuditErrors.InvalidContentDigest;
+        }
+
         return new AuditEvent(
             tenantId,
             messageId,
@@ -83,7 +99,27 @@ public sealed record AuditEvent
             actor!,
             action!,
             resourceType!,
-            resourceId);
+            resourceId,
+            contentDigest);
+    }
+
+    // Exatamente 64 dígitos hexadecimais minúsculos: uma forma só por valor, sem ambiguidade na cadeia.
+    private static bool IsDigest(string value)
+    {
+        if (value.Length != ContentDigestSize * 2)
+        {
+            return false;
+        }
+
+        foreach (var c in value)
+        {
+            if (!(char.IsAsciiDigit(c) || c is >= 'a' and <= 'f'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsCode(string? value)

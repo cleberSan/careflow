@@ -40,7 +40,7 @@ builder.Services.AddOptions<DemoOptions>()
     .BindConfiguration(DemoOptions.SectionName)
     .ValidateDataAnnotations()
     .Validate(o => o.Services.Vault is not null && o.Services.Consent is not null && o.Services.Scheduling is not null
-                   && o.Services.Notifications is not null && o.Services.Audit is not null, "Demo:Services precisa dos cinco endereços.")
+                   && o.Services.Notifications is not null && o.Services.Audit is not null && o.Services.Triage is not null, "Demo:Services precisa dos seis endereços.")
     .Validate(o => o.FirstSlot + o.Slots - 1 <= 64, "Demo:FirstSlot + Demo:Slots passa da partição 64.")
     .ValidateOnStart();
 builder.Services.AddOptions<DemoTokenOptions>()
@@ -66,6 +66,7 @@ foreach (var service in CareFlowService.All)
         "consent" => demo.Services.Consent,
         "scheduling" => demo.Services.Scheduling,
         "notifications" => demo.Services.Notifications,
+        "triage" => demo.Services.Triage,
         _ => demo.Services.Audit,
     };
     builder.Services.AddHttpClient(service.Name, client => client.BaseAddress = address)

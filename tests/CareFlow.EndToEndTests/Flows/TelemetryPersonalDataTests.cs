@@ -6,7 +6,7 @@ namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
 /// Roda os fluxos que tocam dado pessoal (cadastro, leitura, busca por CPF, cadastro recusado, agendamento,
-/// aviso com fallback, revogação, auditoria) e varre tudo o que foi exportado (spans, logs e métricas, depois dos
+/// aviso com fallback, triagem com IA e revisão, revogação, auditoria) e varre tudo o que foi exportado (spans, logs e métricas, depois dos
 /// filtros de cada serviço) atrás do nome, CPF, telefone e e-mail do paciente sintético. Pseudônimo e clínica
 /// também não aparecem: caminhos de URL saem como template e query strings são descartadas.
 /// </summary>
@@ -29,11 +29,19 @@ public sealed class TelemetryPersonalDataTests(CareFlowSystem system)
         Assert.Equal(HttpStatusCode.NotFound, await api.LookupAsync(CareFlow.Testing.SyntheticPatients.Cpf()));
         await api.GrantAsync(patientRef);
         await api.GrantAsync(patientRef, "notifications");
+        await api.GrantAsync(patientRef, "ai-triage");
         var appointment = await api.BookWhenEligibleAsync(patientRef, start);
         await Eventually.GetAsync(
             () => api.NotificationsAsync(appointment),
             list => list.Any(n => n.Kind == "Confirmation" && n.Status == "Sent"),
             description: "confirmação enviada pelo SMS");
+        // A queixa traz todos os dados do paciente: só o banco do Triage guarda o texto, nada disso é exportado.
+        var triage = await api.SubmitTriageAsync(
+            patientRef,
+            $"Sou {patient.FullName}, CPF {patient.Cpf}, e-mail {patient.Email}, telefone {patient.Phone}. Estou com tosse seca e cansaço há três dias, pior à noite, com dor no corpo e um pouco de dor de garganta quando acordo.");
+        Assert.True(triage.SentToModel is not null, triage.ModelStatus);
+        Assert.DoesNotContain(patient.FullName.Split(' ')[^1], triage.SentToModel, StringComparison.OrdinalIgnoreCase);
+        await api.ReviewTriageAsync(triage.Id, "correct", triage.SuggestedPriority == "non-urgent" ? "less-urgent" : "non-urgent");
         await api.RevokeAsync(patientRef);
         await Eventually.GetAsync(
             () => api.NotificationsAsync(appointment),
@@ -65,6 +73,7 @@ public sealed class TelemetryPersonalDataTests(CareFlowSystem system)
             ("pseudônimo (N)", patientRef.ToString("N")),
             ("clínica", api.Clinic.ToString()),
             ("clínica (N)", api.Clinic.ToString("N")),
+            ("queixa", "tosse seca e cansaço"),
         };
 
         foreach (var (what, value) in forbidden)

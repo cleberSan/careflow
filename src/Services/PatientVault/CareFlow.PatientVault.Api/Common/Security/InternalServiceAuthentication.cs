@@ -9,7 +9,7 @@ namespace CareFlow.PatientVault.Api.Common.Security;
 /// <summary>
 /// Tokens de serviço emitidos pelo emissor interno local (ES256, curtos e por clínica). O cofre só guarda a
 /// chave pública: quem valida não consegue emitir. Esse esquema vale apenas nas políticas que o citam
-/// (hoje, a leitura de contato); as demais rotas autenticam só pelo esquema padrão.
+/// (leitura de contato e perfil de triagem); as demais rotas autenticam só pelo esquema padrão.
 /// Recusado em produção: lá o token vem do IdP por client credentials (fase 9).
 /// </summary>
 internal static class InternalServiceAuthentication

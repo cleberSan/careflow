@@ -12,7 +12,7 @@ namespace CareFlow.Demo.Api.Sessions;
 
 /// <summary>
 /// Abre e encerra sessões do Painel. Abrir: partição livre, clínica nova registrada na partição do Notifications,
-/// paciente sintético no cofre e consentimentos para agenda e avisos. Encerrar: apagar a clínica nos quatro
+/// paciente sintético no cofre e consentimentos para agenda, avisos e triagem com IA. Encerrar: apagar a clínica nos cinco
 /// serviços (a partição sai junto) e devolver a partição ao pool depois do resfriamento.
 /// </summary>
 internal sealed partial class SessionLifecycle(
@@ -56,6 +56,7 @@ internal sealed partial class SessionLifecycle(
                 var patient = await services.RegisterPatientAsync(clinic, SyntheticPeople.Create(), cancellationToken).ConfigureAwait(false);
                 await services.GrantAsync(clinic, patient, "scheduling", cancellationToken).ConfigureAwait(false);
                 await services.GrantAsync(clinic, patient, "notifications", cancellationToken).ConfigureAwait(false);
+                await services.GrantAsync(clinic, patient, "ai-triage", cancellationToken).ConfigureAwait(false);
 
                 var (session, cookie) = sessions.Open(clinic, slot);
                 session.PatientRef = patient;

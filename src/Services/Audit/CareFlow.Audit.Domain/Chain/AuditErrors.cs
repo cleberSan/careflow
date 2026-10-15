@@ -13,4 +13,7 @@ public static class AuditErrors
 
     public static readonly Error InvalidActor = Error.Validation(
         "Auditoria.AtorInvalido", "O ator deve ter de 1 a 128 caracteres visíveis, sem espaços.");
+
+    public static readonly Error InvalidContentDigest = Error.Validation(
+        "Auditoria.ResumoInvalido", "O resumo do conteúdo deve ser um SHA-256 com 64 dígitos hexadecimais minúsculos.");
 }

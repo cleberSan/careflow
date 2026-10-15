@@ -44,6 +44,10 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("actor");
 
+                    b.Property<byte[]>("ContentDigest")
+                        .HasColumnType("bytea")
+                        .HasColumnName("content_digest");
+
                     b.Property<byte[]>("Hash")
                         .IsRequired()
                         .HasColumnType("bytea")
@@ -100,6 +104,8 @@ namespace CareFlow.Audit.Api.Infrastructure.Persistence.Migrations
 
                     b.ToTable("audit_entries", null, t =>
                         {
+                            t.HasCheckConstraint("ck_audit_entries_content_digest_length", "content_digest IS NULL OR octet_length(content_digest) = 32");
+
                             t.HasCheckConstraint("ck_audit_entries_hash_length", "octet_length(hash) = 32 AND octet_length(previous_hash) = 32");
 
                             t.HasCheckConstraint("ck_audit_entries_sequence", "sequence > 0");

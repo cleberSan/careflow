@@ -32,6 +32,10 @@
     <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Api/CareFlow.Scheduling.Api.csproj" />
     <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Domain/CareFlow.Scheduling.Domain.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Triage/">
+    <Project Path="src/Services/Triage/CareFlow.Triage.Api/CareFlow.Triage.Api.csproj" />
+    <Project Path="src/Services/Triage/CareFlow.Triage.Domain/CareFlow.Triage.Domain.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CareFlow.Audit.IntegrationTests/CareFlow.Audit.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Audit.UnitTests/CareFlow.Audit.UnitTests.csproj" />
@@ -47,5 +51,8 @@
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Testing/CareFlow.Testing.csproj" />
+    <Project Path="tests/CareFlow.Triage.Evaluation/CareFlow.Triage.Evaluation.csproj" />
+    <Project Path="tests/CareFlow.Triage.IntegrationTests/CareFlow.Triage.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Triage.UnitTests/CareFlow.Triage.UnitTests.csproj" />
   </Folder>
 </Solution>

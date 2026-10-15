@@ -164,6 +164,28 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
         return (await response.Content.ReadFromJsonAsync<ChainVerificationView>(Json, Ct))!;
     }
 
+    /// <summary>
+    /// Envia uma queixa à triagem depois de o consentimento ai-triage chegar ao Triage (consistência eventual),
+    /// para a queixa passar pelo mascaramento e pelo modelo gravado, o caminho que mais toca dado pessoal.
+    /// </summary>
+    public async Task<TriageResultView> SubmitTriageAsync(Guid patientRef, string complaint)
+    {
+        await Eventually.GetAsync(
+            async () => (await Client(system.Triage, "triage.read").GetFromJsonAsync<AiConsentResultView>($"/v1/patients/{patientRef}/ai-consent", Json, Ct))!,
+            consent => consent.State == "granted",
+            description: "consentimento ai-triage no Triage");
+        var response = await Client(system.Triage, "triage.submit").PostAsJsonAsync("/v1/triages", new { PatientRef = patientRef, Complaint = complaint }, Json, Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<TriageResultView>(Json, Ct))!;
+    }
+
+    public async Task<TriageResultView> ReviewTriageAsync(Guid triageId, string decision, string? priority = null)
+    {
+        var response = await Client(system.Triage, "triage.review").PostAsJsonAsync($"/v1/triages/{triageId}/review", new { Decision = decision, Priority = priority }, Json, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<TriageResultView>(Json, Ct))!;
+    }
+
     /// <summary>Quantas vezes o consumidor do serviço registrou estas mensagens no Inbox (lido como admin).</summary>
     public static async Task<long> InboxCountAsync(ServiceHost service, params Guid[] messageIds)
     {
@@ -192,3 +214,7 @@ public sealed record AuditEntryView(long Sequence, string SourceService, string 
 public sealed record AuditPageView(AuditEntryView[] Items, long? NextAfter);
 
 public sealed record ChainVerificationView(bool Intact, long EntriesVerified, long LastSequence, string? Failure, long? BrokenAtSequence);
+
+public sealed record AiConsentResultView(string State, long Version);
+
+public sealed record TriageResultView(Guid Id, string Complaint, string? SentToModel, string? PromptDigest, string ModelStatus, string? SuggestedPriority, string Source, string Decision);

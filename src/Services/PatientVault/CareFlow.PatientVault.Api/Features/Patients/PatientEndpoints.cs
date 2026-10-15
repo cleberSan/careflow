@@ -35,6 +35,11 @@ internal static class PatientEndpoints
             .WithName("GetPatientContact")
             .WithSummary("Devolve só telefone e e-mail, para avisos ao paciente. Aceita token de serviço interno.");
 
+        patients.MapGet("/{patientRef:guid}/triage-profile", GetTriageProfileEndpoint.HandleAsync)
+            .RequireAuthorization(AuthorizationPolicies.TriageProfileRead)
+            .WithName("GetTriageProfile")
+            .WithSummary("Devolve só idade em anos e nome, para a triagem mascarar a queixa. Aceita token de serviço interno.");
+
         patients.MapPut("/{patientRef:guid}", UpdatePatientEndpoint.HandleAsync)
             .RequireAuthorization(AuthorizationPolicies.Write)
             .WithName("UpdatePatient")

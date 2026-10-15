@@ -14,7 +14,9 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
     private readonly Lock _gate = new();
     private readonly List<Guid> _appointments = [];
     private readonly HashSet<string> _traces = new(StringComparer.Ordinal);
+    private readonly HashSet<Guid> _triages = [];
     private int _bookingsReserved;
+    private int _triagesReserved;
 
     /// <summary>Hash SHA-256 do valor do cookie; o valor em si nunca é guardado.</summary>
     public string Id { get; } = id;
@@ -61,6 +63,38 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
         lock (_gate)
         {
             _appointments.Add(appointment);
+        }
+    }
+
+    /// <summary>Reserva uma triagem da sessão (conta mesmo se a triagem recusar a queixa); falso no limite.</summary>
+    public bool TryReserveTriage(int limit)
+    {
+        lock (_gate)
+        {
+            if (_triagesReserved >= limit)
+            {
+                return false;
+            }
+
+            _triagesReserved++;
+            return true;
+        }
+    }
+
+    public void AddTriage(Guid triage)
+    {
+        lock (_gate)
+        {
+            _triages.Add(triage);
+        }
+    }
+
+    /// <summary>Só triagens que a própria sessão criou podem ser revisadas por ela (o id vem do navegador).</summary>
+    public bool OwnsTriage(Guid triage)
+    {
+        lock (_gate)
+        {
+            return _triages.Contains(triage);
         }
     }
 

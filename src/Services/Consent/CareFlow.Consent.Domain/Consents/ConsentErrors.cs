@@ -14,6 +14,9 @@ public static class ConsentErrors
     public static readonly Error InvalidLegalBasis = Error.Validation(
         "Consentimento.BaseLegalInvalida", "Base legal desconhecida.");
 
+    public static readonly Error LegalBasisNotAllowedForPurpose = Error.Validation(
+        "Consentimento.BaseLegalNaoPermitidaParaFinalidade", "Esta finalidade exige consentimento específico (specific-consent).");
+
     public static readonly Error InvalidTermVersion = Error.Validation(
         "Consentimento.VersaoDoTermoInvalida", "A versão do termo deve ter de 1 a 32 letras, dígitos, '.', '_' ou '-'.");
 

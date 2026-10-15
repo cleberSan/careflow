@@ -15,6 +15,7 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEn
         {
             table.HasCheckConstraint("ck_audit_entries_sequence", "sequence > 0");
             table.HasCheckConstraint("ck_audit_entries_hash_length", "octet_length(hash) = 32 AND octet_length(previous_hash) = 32");
+            table.HasCheckConstraint("ck_audit_entries_content_digest_length", "content_digest IS NULL OR octet_length(content_digest) = 32");
         });
 
         builder.HasKey(e => new { e.TenantId, e.Sequence }).HasName("pk_audit_entries");
@@ -28,6 +29,8 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEn
         builder.Property(e => e.Action).HasColumnName("action").HasMaxLength(64);
         builder.Property(e => e.ResourceType).HasColumnName("resource_type").HasMaxLength(64);
         builder.Property(e => e.ResourceId).HasColumnName("resource_id");
+        builder.Property(e => e.ContentDigest).HasColumnName("content_digest");
+        builder.Ignore(e => e.ContentDigestHex);
         builder.Property(e => e.KeyId).HasColumnName("key_id").HasMaxLength(64);
         builder.Property(e => e.PreviousHash).HasColumnName("previous_hash");
         builder.Property(e => e.Hash).HasColumnName("hash");

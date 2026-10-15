@@ -20,7 +20,7 @@ jobs:
   build-test:
     name: Build, formatação e testes
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
         with:
@@ -43,8 +43,10 @@ jobs:
 
       - name: Testes com cobertura (mínimo 80% de linhas)
         env:
-          # O teste de gravação do Painel escreve aqui os quatro cenários (ADR-0010).
+          # O teste de gravação do Painel escreve aqui os cenários (ADR-0010).
           CAREFLOW_PANEL_RECORDING: ${{ github.workspace }}/panel-recording/panel.json
+          # A avaliação da triagem reproduz as respostas gravadas e publica as métricas aqui (ADR-0011).
+          CAREFLOW_TRIAGE_EVALUATION: ${{ github.workspace }}/triage-evaluation/triage-evaluation.json
         run: >
           dotnet test -c Release --no-build
           --coverlet --coverlet-output-format cobertura
@@ -59,6 +61,14 @@ jobs:
           path: TestResults/
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Publicar avaliação da triagem
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-evaluation
+          path: triage-evaluation/triage-evaluation.json
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Publicar gravação do Painel
         uses: actions/upload-artifact@v4

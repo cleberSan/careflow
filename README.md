@@ -31,7 +31,7 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [x] **Fase 4:** Consent e Audit com eventos, Outbox/Inbox e revogação propagada ([ADR-0006](docs/adr/0006-mensageria-outbox-inbox-rabbitmq.md), [ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md), [ADR-0008](docs/adr/0008-consentimento-e-propagacao-para-a-agenda.md))
 - [x] **Fase 5:** Notifications com fallback entre canais, circuit breaker e falhas injetáveis ([ADR-0009](docs/adr/0009-notificacoes-com-fallback-e-falhas-injetaveis.md))
 - [x] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md))
-- [ ] **Fase 7:** Triagem com IA, pseudonimização e guardrails
+- [x] **Fase 7:** Triagem com IA sobre dados pseudonimizados, guardrails e revisão humana ([ADR-0011](docs/adr/0011-triagem-com-ia-pseudonimizada.md))
 - [ ] **Fase 8:** Direitos do titular e adaptador HL7 FHIR
 - [ ] **Fase 9:** Testes de carga, IaC e deploy com canary
 
@@ -92,7 +92,7 @@ Consentimentos e bases legais por finalidade em `src/Services/Consent` ([ADR-000
 
 ### Audit
 
-Trilha de auditoria em `src/Services/Audit` ([ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md)). Registra cada leitura e alteração de dado de paciente feita no cofre, no Consent e na agenda, e cada aviso enviado ou não enviado pelo Notifications.
+Trilha de auditoria em `src/Services/Audit` ([ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md)). Registra cada leitura e alteração de dado de paciente feita no cofre, no Consent e na agenda, cada aviso enviado ou não enviado pelo Notifications e cada triagem, com o resumo SHA-256 do que saiu para o modelo.
 
 - **Cadeia HMAC por clínica:** cada entrada encadeia a anterior com HMAC-SHA256 e chave fora do banco; a verificação aponta a primeira entrada adulterada, removida ou fora de ordem.
 - **Append-only no banco:** trigger recusa `UPDATE`, `DELETE` e `TRUNCATE`; a API só lê e insere.
@@ -120,14 +120,32 @@ Avisos ao paciente em `src/Services/Notifications` ([ADR-0009](docs/adr/0009-not
 | `GET` | `/v1/settings` | `notifications.admin` |
 | `PUT` | `/v1/settings` | `notifications.admin` |
 
+### Triage
+
+Triagem assistida por IA em `src/Services/Triage` ([ADR-0011](docs/adr/0011-triagem-com-ia-pseudonimizada.md)). A queixa em texto livre vira uma sugestão de prioridade (emergência, urgente, pouco urgente, não urgente) com justificativa curta. Não é diagnóstico, e todo caso termina com um profissional confirmando ou corrigindo.
+
+- **Pseudonimização antes da IA:** nome, CPF, contatos, datas, idade, endereço e links viram marcadores; o modelo recebe só o texto mascarado e a faixa etária, sem pseudônimo nem clínica. Se o mascaramento cobrir mais da metade do texto, a queixa não sai.
+- **Alarmes por regra:** sinais de alarme rodam sobre o texto original e só sobem a prioridade; o modelo nunca rebaixa um alarme.
+- **Guardrails:** saída validada por JSON Schema, justificativa com diagnóstico, remédio ou promessa descartada, prompt injection barrada antes do modelo e contida depois dele.
+- **Consentimento próprio:** sem `ai-triage` ativo não há chamada à IA, e a revogação vale para as próximas triagens.
+- **Auditoria:** toda sugestão, leitura, confirmação e correção vai para a trilha HMAC, com o SHA-256 do pedido que saiu e nunca o texto.
+- **Avaliação no CI sem custo por build:** 57 casos sintéticos reproduzidos a partir de respostas gravadas do Claude Haiku 5.5, com métricas publicadas como artefato; só um workflow manual, com teto de chamadas, chama o modelo.
+
+| Método | Rota | Escopo |
+|---|---|---|
+| `POST` | `/v1/triages` | `triage.submit` |
+| `GET` | `/v1/triages/{id}` | `triage.read` ou `triage.review` |
+| `POST` | `/v1/triages/{id}/review` | `triage.review` |
+| `GET` | `/v1/patients/{patientRef}/ai-consent` | `triage.read` ou `triage.review` |
+
 ### Observabilidade e Painel
 
-OpenTelemetry nos cinco serviços ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md)):
+OpenTelemetry nos seis serviços ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md)):
 
 - **Um trace por fluxo:** o contexto viaja no envelope do Outbox até o Inbox, então uma reserva é um trace só, da API da agenda ao aviso enviado, e uma revogação vai do Consent ao aviso de cancelamento e à auditoria.
 - **Sem dado pessoal na telemetria:** redação no serviço e no Collector, baggage de fora descartado, e um teste de ponta a ponta que varre spans, logs e métricas exportados atrás de nome, CPF, telefone e e-mail.
 - **Stack local:** Collector, Tempo, Loki, Prometheus e Grafana no docker compose, com dashboards versionados de latência, Outbox, mensagens mortas, propagação da revogação, fallbacks e circuit breaker.
-- **Painel de Privacidade e Resiliência:** o serviço `src/Services/Demo` é o backend do Painel, com sessão por cookie `__Host-`, clínica sintética e partição de circuit breaker por visitante, limites de uso e limpeza no fim. O CI grava os quatro cenários e o site reproduz a gravação, com data e commit.
+- **Painel de Privacidade e Resiliência:** o serviço `src/Services/Demo` é o backend do Painel, com sessão por cookie `__Host-`, clínica sintética e partição de circuit breaker por visitante, limites de uso e limpeza no fim. O CI grava os cinco cenários, triagem com IA incluída, e o site reproduz a gravação, com data e commit.
 
 ### Mensageria
 

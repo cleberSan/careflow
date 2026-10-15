@@ -7,12 +7,15 @@ namespace CareFlow.Audit.Domain.Chain;
 /// <summary>
 /// Hash encadeado da auditoria: <c>hash(n) = HMAC-SHA256(chave, v1 ‖ campos(n) ‖ hash(n-1))</c>, com
 /// codificação binária canônica (campos de texto prefixados pelo tamanho), sem ambiguidade de separador.
+/// O resumo de conteúdo, quando existe, entra depois do recurso com um marcador próprio; entradas sem resumo
+/// têm exatamente os mesmos bytes de antes, então as cadeias já gravadas continuam válidas.
 /// </summary>
 public static class AuditChain
 {
     public const int HashSize = 32;
 
     private static readonly byte[] DomainSeparator = Encoding.ASCII.GetBytes("careflow-audit-v1");
+    private static readonly byte[] ContentDigestMarker = [0x01];
 
     /// <summary>Monta a próxima entrada a partir da cabeça atual da cadeia.</summary>
     public static ChainedEntry Append(ChainHead head, AuditEvent auditEvent, DateTimeOffset recordedAt, ChainKey key)
@@ -53,6 +56,12 @@ public static class AuditChain
         AppendText(hmac, auditEvent.Action);
         AppendText(hmac, auditEvent.ResourceType);
         AppendGuid(hmac, auditEvent.ResourceId);
+        if (auditEvent.ContentDigest is { } digest)
+        {
+            hmac.AppendData(ContentDigestMarker);
+            hmac.AppendData(Convert.FromHexString(digest));
+        }
+
         hmac.AppendData(previousHash);
         return hmac.GetHashAndReset();
     }

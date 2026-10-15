@@ -60,6 +60,35 @@ internal sealed class DemoClient : IDisposable
         return (await response.Content.ReadFromJsonAsync<ActionView>(Ct))!;
     }
 
+    public async Task<TriageView> SubmitTriageAsync(string complaint)
+    {
+        var response = await SubmitTriageRawAsync(complaint);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Triagem pelo Demo: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<TriageView>(Ct))!;
+    }
+
+    public Task<HttpResponseMessage> SubmitTriageRawAsync(string? complaint) =>
+        _http.PostAsJsonAsync("demo/v1/triages", new TriageRequestBody(complaint), Ct);
+
+    public async Task<TriageView> ReviewTriageAsync(Guid id, string decision, string? priority = null)
+    {
+        var response = await ReviewTriageRawAsync(id, decision, priority);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Revisão pelo Demo: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<TriageView>(Ct))!;
+    }
+
+    public Task<HttpResponseMessage> ReviewTriageRawAsync(Guid id, string? decision, string? priority = null) =>
+        _http.PostAsJsonAsync($"demo/v1/triages/{id}/review", new TriageReviewBody(decision, priority), Ct);
+
+    public Task<AiConsentView> AiConsentAsync() => GetAsync<AiConsentView>("demo/v1/triage-consent");
+
+    public async Task<ActionView> RevokeAiTriageAsync()
+    {
+        var response = await _http.PostAsync("demo/v1/consents/ai-triage/revoke", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<ActionView>(Ct))!;
+    }
+
     public Task<PropagationView> PropagationAsync() => GetAsync<PropagationView>("demo/v1/propagation");
 
     public Task<ChannelsView> ChannelsAsync() => GetAsync<ChannelsView>("demo/v1/channels");

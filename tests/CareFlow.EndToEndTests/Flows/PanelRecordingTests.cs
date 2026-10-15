@@ -10,15 +10,17 @@ using demo::CareFlow.Demo.Api.Features;
 using demo::CareFlow.Demo.Api.Telemetry;
 
 using AppointmentView = demo::CareFlow.Demo.Api.Features.AppointmentView;
+using AuditEntryView = demo::CareFlow.Demo.Api.Features.AuditEntryView;
 using NotificationView = demo::CareFlow.Demo.Api.Features.NotificationView;
 
 namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
-/// Grava os quatro cenários do Painel contra o sistema inteiro, com um paciente sintético só, para o site
+/// Grava os cinco cenários do Painel contra o sistema inteiro, com um paciente sintético só, para o site
 /// reproduzir (ADR-0010). Roda em todo CI como teste; o arquivo só é escrito quando
-/// <c>CAREFLOW_PANEL_RECORDING</c> aponta para um caminho. Ordem: reserva, visões, queda do WhatsApp e, por
-/// último, a revogação (que cancela tudo e impediria novas reservas).
+/// <c>CAREFLOW_PANEL_RECORDING</c> aponta para um caminho. Ordem: reserva, visões, queda do WhatsApp, triagem com
+/// IA (fase 7, com as respostas gravadas do modelo) e, por último, a revogação (que cancela tudo e impediria novas
+/// reservas).
 /// </summary>
 [Collection(SequentialFlows.Name)]
 public sealed class PanelRecordingTests(CareFlowSystem system)
@@ -34,7 +36,7 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task RecordsTheFourScenarios_WithoutPersonalDataOutsideTheVault()
+    public async Task RecordsTheFiveScenarios_WithoutPersonalDataOutsideTheVault()
     {
         // Arrange: partição própria e espaço para as reservas do cenário de resiliência.
         await using var demo = system.StartDemo(("Demo:FirstSlot", "14"), ("Demo:Slots", "1"), ("Demo:MaxBookingsPerSession", "8"));
@@ -73,7 +75,11 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
         steps.Add(Step(clock, "reserva", await visitor.ChannelsAsync(), recovered, recoveredNotice));
         var fallbackTrace = await TraceWithAsync(visitor, fallback!.TraceId, "deliver notification");
 
-        // Act 3: revogação e a propagação até a auditoria.
+        // Act 3: triagem com IA. Os casos vêm do conjunto de avaliação, então o pedido mascarado é o mesmo que gerou
+        // as gravações: com elas no repositório, o Painel mostra a resposta real do modelo.
+        var triage = await TriageScenarioAsync(visitor, views.Vault);
+
+        // Act 4: revogação e a propagação até a auditoria.
         var before = await visitor.PropagationAsync();
         var revoke = await visitor.RevokeAsync();
         var after = await Eventually.GetAsync(
@@ -90,7 +96,7 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
         await visitor.EndAsync();
 
         var recording = new PanelRecording(
-            Schema: 1,
+            Schema: 2,
             RecordedAt: DateTimeOffset.UtcNow,
             Commit: Environment.GetEnvironmentVariable("GITHUB_SHA") ?? Environment.GetEnvironmentVariable("CAREFLOW_COMMIT") ?? "local",
             Source: "Testes de ponta a ponta do CareFlow (Testcontainers com PostgreSQL e RabbitMQ, provedores simulados)",
@@ -98,11 +104,19 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
             Booking: new BookingScenario(booking, bookingTrace, bookingLogs),
             Views: new ViewsScenario(views.Scheduling, views.ConsentPatientRef, views.Consent, views.Notifications, views.LogMask, bookingLogs),
             Resilience: new ResilienceScenario(steps, fallbackTrace),
+            Triage: triage,
             Revocation: new RevocationScenario(revoke, before, after, revokeTrace, revokeLogs));
 
-        // Assert: o que vai para o navegador não tem dado pessoal fora da visão (já mascarada) do cofre.
+        // Assert: o que vai para o navegador não tem dado pessoal fora da visão (já mascarada) do cofre e do que o
+        // paciente escreveu na queixa (nome inventado e e-mail em example.com, como no cofre).
         var full = JsonSerializer.Serialize(recording, Json);
-        var withoutVault = JsonSerializer.Serialize(recording with { Patient = recording.Patient with { Vault = null } }, Json);
+        var withoutVault = JsonSerializer.Serialize(
+            recording with
+            {
+                Patient = recording.Patient with { Vault = null },
+                Triage = triage with { Steps = [.. triage.Steps.Select(s => s with { Complaint = string.Empty, Submitted = s.Submitted with { Complaint = string.Empty }, Reviewed = s.Reviewed with { Complaint = string.Empty } })] },
+            },
+            Json);
         Assert.DoesNotContain(views.Vault.Cpf, full, StringComparison.Ordinal);
         Assert.DoesNotContain(views.Vault.Phone!, full, StringComparison.Ordinal);
         foreach (var personal in new[] { views.Vault.FullName, views.Vault.Email!, views.Vault.Cpf, views.Vault.Phone! })
@@ -122,6 +136,75 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             await File.WriteAllTextAsync(path, full, Ct);
         }
+    }
+
+    /// <summary>
+    /// Quatro triagens: dados pessoais mascarados antes do modelo, sinal de alarme que sobe a prioridade, tentativa de
+    /// manipular a IA barrada antes do modelo e, depois da revogação do ai-triage, uma queixa que fica só com as
+    /// regras. Toda sugestão termina com a decisão do profissional.
+    /// </summary>
+    private static async Task<TriageScenario> TriageScenarioAsync(DemoClient visitor, VaultView vault)
+    {
+        var cases = TriageCases.Load();
+        var personal = cases["p09"];
+        var masked = personal.Complaint
+            .Replace(personal.FullName!, vault.FullName, StringComparison.Ordinal)
+            .Replace("paciente.sintetico.7f3a@example.com", vault.Email!, StringComparison.Ordinal);
+        var consentBefore = await visitor.AiConsentAsync();
+        var steps = new List<TriageStep>
+        {
+            await TriageStepAsync(visitor, "dados-pessoais", personal, masked),
+            await TriageStepAsync(visitor, "sinal-de-alarme", cases["a16"]),
+            await TriageStepAsync(visitor, "tentativa-de-manipulacao", cases["i05"]),
+        };
+
+        var revocation = await visitor.RevokeAiTriageAsync();
+        var consentAfter = await Eventually.GetAsync(() => visitor.AiConsentAsync(), c => c.State == "revoked", description: "revogação do ai-triage no Triage");
+        steps.Add(await TriageStepAsync(visitor, "sem-consentimento", cases["c01"]));
+
+        var trace = await TraceWithAsync(visitor, steps[0].Submitted.TraceId, "call triage model");
+        var logs = await visitor.LogsAsync(steps[0].Submitted.TraceId);
+        var propagation = await Eventually.GetAsync(
+            () => visitor.PropagationAsync(),
+            p => p.Audit.Count(e => e.SourceService == "triage" && e.Action.StartsWith("triage.suggested.", StringComparison.Ordinal)) == steps.Count
+                 && p.Audit.Count(e => e.Action is "triage.confirmed" or "triage.corrected") == steps.Count,
+            description: "triagens na trilha de auditoria");
+        var audit = propagation.Audit.Where(e => e.SourceService == "triage").ToArray();
+
+        // O resumo na trilha é o SHA-256 do pedido que saiu; triagens que não saíram não têm resumo.
+        Assert.Equal("Meu nome é [nome], e-mail [email], estou com tosse seca há três dias e um pouco de cansaço.", steps[0].Submitted.SentToModel);
+        Assert.Contains(audit, e => e.ContentDigest is not null && e.ContentDigest == steps[0].Submitted.PromptDigest);
+        Assert.Equal("emergency", steps[1].Reviewed.FinalPriority);
+        Assert.Contains("falta-de-ar", steps[1].Submitted.AlarmSigns);
+        Assert.Equal(("skipped-injection", (string?)null), (steps[2].Submitted.ModelStatus, steps[2].Submitted.SentToModel));
+        Assert.Equal(("skipped-no-consent", (string?)null), (steps[3].Submitted.ModelStatus, steps[3].Submitted.SentToModel));
+        Assert.All(steps, s => Assert.NotEqual("pending", s.Reviewed.Decision));
+        Assert.True(propagation.Chain.Intact);
+
+        return new TriageScenario(
+            Model: "Respostas gravadas do modelo (eval/triage/recordings); sem gravação, o modelo conta como indisponível e só as regras sugerem",
+            steps,
+            consentBefore,
+            revocation,
+            consentAfter,
+            audit,
+            propagation.Chain,
+            trace,
+            logs);
+    }
+
+    /// <summary>
+    /// O profissional confirma quando a sugestão bate com a prioridade de referência do caso e corrige para ela
+    /// quando não bate ou quando não houve sugestão (modelo indisponível ou barrado, sem sinal de alarme).
+    /// </summary>
+    private static async Task<TriageStep> TriageStepAsync(DemoClient visitor, string scenario, TriageCase @case, string? complaint = null)
+    {
+        complaint ??= @case.Complaint;
+        var submitted = await visitor.SubmitTriageAsync(complaint);
+        var reviewed = submitted.SuggestedPriority == @case.Expected
+            ? await visitor.ReviewTriageAsync(submitted.Id, "confirm")
+            : await visitor.ReviewTriageAsync(submitted.Id, "correct", @case.Expected);
+        return new TriageStep(scenario, @case.Id, complaint, submitted, reviewed);
     }
 
     private static ResilienceStep Step(Stopwatch clock, string action, ChannelsView channels, BookingView? booking = null, NotificationView? notification = null) =>
@@ -149,6 +232,7 @@ internal sealed record PanelRecording(
     BookingScenario Booking,
     ViewsScenario Views,
     ResilienceScenario Resilience,
+    TriageScenario Triage,
     RevocationScenario Revocation);
 
 internal sealed record RecordedPatient(MaskedVault? Vault, Guid Pseudonym, string LogMask);
@@ -179,3 +263,34 @@ internal sealed record ResilienceStep(long AtMs, string Action, ChannelsView Cha
 internal sealed record ResilienceScenario(IReadOnlyList<ResilienceStep> Steps, TraceView FallbackTrace);
 
 internal sealed record RevocationScenario(ActionView Action, PropagationView Before, PropagationView After, TraceView Trace, IReadOnlyList<LogView> Logs);
+
+internal sealed record TriageStep(string Scenario, string Case, string Complaint, TriageView Submitted, TriageView Reviewed);
+
+internal sealed record TriageScenario(
+    string Model,
+    IReadOnlyList<TriageStep> Steps,
+    AiConsentView ConsentBefore,
+    ActionView Revocation,
+    AiConsentView ConsentAfter,
+    IReadOnlyList<AuditEntryView> Audit,
+    ChainView Chain,
+    TraceView Trace,
+    IReadOnlyList<LogView> Logs);
+
+/// <summary>Os casos de <c>eval/triage/cases.json</c>, para o Painel usar exatamente as queixas que foram gravadas.</summary>
+internal static class TriageCases
+{
+    public static IReadOnlyDictionary<string, TriageCase> Load()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(RepositoryPaths.TriageCases));
+        return document.RootElement.GetProperty("cases").EnumerateArray()
+            .Select(c => new TriageCase(
+                c.GetProperty("id").GetString()!,
+                c.GetProperty("complaint").GetString()!,
+                c.GetProperty("expected").GetString()!,
+                c.TryGetProperty("fullName", out var name) ? name.GetString() : null))
+            .ToDictionary(c => c.Id, StringComparer.Ordinal);
+    }
+}
+
+internal sealed record TriageCase(string Id, string Complaint, string Expected, string? FullName);
