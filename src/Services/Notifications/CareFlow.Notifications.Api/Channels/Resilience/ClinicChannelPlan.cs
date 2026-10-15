@@ -14,8 +14,9 @@ internal sealed record ClinicChannelPlan(string Partition, IReadOnlyDictionary<C
 
 /// <summary>
 /// Monta o plano de envio da clínica do escopo (a do tenant, com RLS): se ela está numa partição isolada dentro do
-/// prazo, os envios contam no circuito dessa partição e a falha gravada para a clínica vale no lugar da
-/// configuração geral. Lido a cada aviso, do banco: todas as instâncias do serviço enxergam a mesma falha, o que
+/// prazo, os envios contam no circuito dessa partição e só valem as falhas gravadas para a clínica. A falha geral
+/// da configuração é do mundo compartilhado e não entra na partição: o visitante vê os canais exatamente como ele
+/// os deixou. Lido a cada aviso, do banco: todas as instâncias do serviço enxergam a mesma falha, o que
 /// resolve o "falha por processo" do ADR-0009 para o demo.
 /// </summary>
 internal sealed class ClinicFaultResolver(
@@ -44,15 +45,14 @@ internal sealed class ClinicFaultResolver(
 
     public async Task<ClinicChannelPlan> PlanAsync(CancellationToken cancellationToken)
     {
-        var general = faults.CurrentValue;
-        var effective = Enum.GetValues<Channel>().ToDictionary(channel => channel, general.For);
-
         var partition = await ActivePartitionAsync(cancellationToken).ConfigureAwait(false);
         if (partition is null)
         {
-            return new ClinicChannelPlan(ClinicIsolation.Shared, effective);
+            var general = faults.CurrentValue;
+            return new ClinicChannelPlan(ClinicIsolation.Shared, Enum.GetValues<Channel>().ToDictionary(channel => channel, general.For));
         }
 
+        var effective = Enum.GetValues<Channel>().ToDictionary(channel => channel, _ => (ChannelFaultOptions?)null);
         var now = time.GetUtcNow();
         var overrides = await db.ChannelFaults.AsNoTracking()
             .Where(f => f.ExpiresAt > now)

@@ -16,7 +16,8 @@ internal sealed class ChannelResilienceOptions
     [Range(typeof(TimeSpan), "00:00:00.010", "00:05:00")]
     public TimeSpan TotalTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
-    [Range(0, 10)]
+    /// <summary>O Polly exige ao menos uma nova tentativa; com zero o pipeline nem seria montado.</summary>
+    [Range(1, 10)]
     public int MaxRetryAttempts { get; set; } = 2;
 
     [Range(typeof(TimeSpan), "00:00:00", "00:00:30")]

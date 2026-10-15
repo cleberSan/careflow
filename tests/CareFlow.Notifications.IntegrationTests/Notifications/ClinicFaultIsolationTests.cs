@@ -134,6 +134,21 @@ public sealed class ClinicFaultIsolationTests(NotificationsApiFixture api) : IAs
     }
 
     [Fact]
+    public async Task GeneralFault_DoesNotReachIsolatedClinics()
+    {
+        // Arrange: o operador derruba o WhatsApp para o mundo compartilhado.
+        api.ConfigureFaults(enabled: true, (Channel.WhatsApp, FaultMode.Unavailable));
+
+        // Act
+        var (isolated, appointmentIsolated) = await BookAndDispatchAsync(VisitorA);
+        var (shared, appointmentShared) = await BookAndDispatchAsync();
+
+        // Assert: a sessão do Painel só vê as falhas que ela mesma ligou.
+        Assert.Equal("WhatsApp", (await isolated.NotificationAsync(appointmentIsolated, "Confirmation")).SentVia);
+        Assert.Equal("Sms", (await shared.NotificationAsync(appointmentShared, "Confirmation")).SentVia);
+    }
+
+    [Fact]
     public async Task TakenPartition_IsRefusedToAnotherClinic()
     {
         // Act: um visitante novo tenta a partição que está com A.
