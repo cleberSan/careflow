@@ -39,6 +39,7 @@ internal sealed partial class CancelAppointmentHandler(
 
         db.RecordAccess(
             appointment.TenantId, SchedulingAudit.SourceService, actor, "appointment.cancelled", SchedulingAudit.ResourceType, appointment.PatientRef, now);
+        db.PublishCancelled(appointment, now);
 
         try
         {

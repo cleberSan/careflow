@@ -3,6 +3,7 @@ using CareFlow.BuildingBlocks.Messaging.Outbox;
 using CareFlow.Contracts.Consents;
 using CareFlow.Scheduling.Api.Common;
 using CareFlow.Scheduling.Api.Common.Observability;
+using CareFlow.Scheduling.Api.Features.Appointments;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 using CareFlow.Scheduling.Domain.Appointments;
 
@@ -59,6 +60,7 @@ internal sealed partial class ConsentRevokedConsumer(
                 cancelled++;
                 db.RecordAccess(
                     context.TenantId, SchedulingAudit.SourceService, SchedulingAudit.SystemActor, CancelAction, SchedulingAudit.ResourceType, appointment.PatientRef, now);
+                db.PublishCancelled(appointment, now);
             }
         }
 

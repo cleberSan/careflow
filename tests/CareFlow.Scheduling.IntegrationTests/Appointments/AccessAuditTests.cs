@@ -44,7 +44,7 @@ public sealed class AccessAuditTests(SchedulingApiFixture api)
         await client.BookAsync(request, NewKey(), Ct);
 
         // Assert
-        var payload = Assert.Single(await api.OutboxAsync(_tenant)).Payload;
+        var payload = Assert.Single(await api.OutboxAsync(_tenant), row => row.AuditAction is not null).Payload;
         Assert.Equal("scheduling", payload.GetProperty("sourceService").GetString());
         Assert.Equal("patient", payload.GetProperty("resourceType").GetString());
         Assert.Equal(request.PatientRef, payload.GetProperty("resourceId").GetGuid());
