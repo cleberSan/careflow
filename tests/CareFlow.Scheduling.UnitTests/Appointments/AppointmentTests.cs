@@ -231,4 +231,57 @@ public sealed class AppointmentTests
         Assert.Equal(AppointmentErrors.AlreadyStarted, result.Error);
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
     }
+
+    [Fact]
+    public void Cancel_ByRequest_RecordsRequestedReason()
+    {
+        // Arrange
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Act
+        appointment.Cancel(Now);
+
+        // Assert
+        Assert.Equal(CancellationReason.Requested, appointment.CancellationReason);
+    }
+
+    [Fact]
+    public void Book_NewAppointment_HasNoCancellationReason()
+    {
+        // Act
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Assert
+        Assert.Null(appointment.CancellationReason);
+    }
+
+    [Fact]
+    public void CancelForConsentRevocation_FutureAppointment_RecordsConsentRevokedReason()
+    {
+        // Arrange
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Act
+        var result = appointment.CancelForConsentRevocation(Now);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AppointmentStatus.Cancelled, appointment.Status);
+        Assert.Equal(CancellationReason.ConsentRevoked, appointment.CancellationReason);
+    }
+
+    [Fact]
+    public void CancelForConsentRevocation_StartedAppointment_KeepsItBooked()
+    {
+        // Arrange
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Act
+        var result = appointment.CancelForConsentRevocation(Tomorrow9h.AddMinutes(5));
+
+        // Assert
+        Assert.Equal(AppointmentErrors.AlreadyStarted, result.Error);
+        Assert.Equal(AppointmentStatus.Booked, appointment.Status);
+        Assert.Null(appointment.CancellationReason);
+    }
 }

@@ -31,6 +31,8 @@ public sealed class Appointment
 
     public DateTimeOffset? CancelledAt { get; private set; }
 
+    public CancellationReason? CancellationReason { get; private set; }
+
     /// <summary>Chave de idempotência enviada pelo cliente na criação.</summary>
     public string IdempotencyKey { get; private set; } = string.Empty;
 
@@ -91,7 +93,15 @@ public sealed class Appointment
         };
     }
 
-    public Result Cancel(DateTimeOffset now)
+    public Result Cancel(DateTimeOffset now) => Cancel(now, Appointments.CancellationReason.Requested);
+
+    /// <summary>
+    /// Cancela porque o paciente revogou o consentimento para agendamento. Só vale para consultas futuras e
+    /// ainda ativas; as que já começaram ficam como estão (o atendimento aconteceu sob a base vigente).
+    /// </summary>
+    public Result CancelForConsentRevocation(DateTimeOffset now) => Cancel(now, Appointments.CancellationReason.ConsentRevoked);
+
+    private Result Cancel(DateTimeOffset now, CancellationReason reason)
     {
         if (Status == AppointmentStatus.Cancelled)
         {
@@ -105,6 +115,7 @@ public sealed class Appointment
 
         Status = AppointmentStatus.Cancelled;
         CancelledAt = ToStoragePrecision(now);
+        CancellationReason = reason;
         return Result.Success();
     }
 

@@ -23,11 +23,114 @@ namespace CareFlow.Scheduling.Api.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "btree_gist");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Inbox.InboxMessage", b =>
+                {
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("consumer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Consumer", "MessageId")
+                        .HasName("pk_inbox_messages");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_inbox_messages_processed_at");
+
+                    b.ToTable("inbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Outbox.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset?>("DispatchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatched_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TraceParent")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_parent");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outbox_messages");
+
+                    b.HasIndex("DispatchedAt")
+                        .HasDatabaseName("ix_outbox_messages_dispatched_at")
+                        .HasFilter("dispatched_at IS NOT NULL");
+
+                    b.HasIndex("NextAttemptAt", "Id")
+                        .HasDatabaseName("ix_outbox_messages_pending")
+                        .HasFilter("dispatched_at IS NULL");
+
+                    b.ToTable("outbox_messages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_outbox_messages_attempts", "attempts >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CareFlow.Scheduling.Domain.Appointments.Appointment", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("cancellation_reason");
 
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasColumnType("timestamp with time zone")
@@ -89,14 +192,59 @@ namespace CareFlow.Scheduling.Api.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_appointments_tenant_idempotency_key");
 
+                    b.HasIndex("TenantId", "PatientRef", "StartsAt")
+                        .HasDatabaseName("ix_appointments_tenant_patient_starts_at")
+                        .HasFilter("status = 'Booked'");
+
                     b.HasIndex("TenantId", "ProfessionalId", "StartsAt")
                         .HasDatabaseName("ix_appointments_tenant_professional_starts_at");
 
                     b.ToTable("appointments", null, t =>
                         {
+                            t.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked')");
+
                             t.HasCheckConstraint("ck_appointments_interval", "ends_at > starts_at");
 
                             t.HasCheckConstraint("ck_appointments_status", "status IN ('Booked', 'Cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("CareFlow.Scheduling.Domain.Patients.PatientStatus", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PatientRef")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_ref");
+
+                    b.Property<long>("ConsentVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("consent_version");
+
+                    b.Property<bool>("IsRegistered")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_registered");
+
+                    b.Property<string>("SchedulingConsent")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("scheduling_consent");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("TenantId", "PatientRef")
+                        .HasName("pk_patient_statuses");
+
+                    b.ToTable("patient_statuses", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_patient_statuses_consent", "scheduling_consent IN ('Unknown', 'Granted', 'Revoked')");
+
+                            t.HasCheckConstraint("ck_patient_statuses_consent_version", "consent_version >= 0");
                         });
                 });
 #pragma warning restore 612, 618

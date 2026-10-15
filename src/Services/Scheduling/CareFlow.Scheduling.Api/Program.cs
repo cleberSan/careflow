@@ -2,9 +2,13 @@ using System.Text.Json.Serialization;
 
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
+using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.Contracts.Consents;
+using CareFlow.Contracts.Patients;
 using CareFlow.Scheduling.Api.Common.Observability;
 using CareFlow.Scheduling.Api.Common.Security;
 using CareFlow.Scheduling.Api.Features.Appointments;
+using CareFlow.Scheduling.Api.Features.Patients;
 using CareFlow.Scheduling.Api.Infrastructure;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 
@@ -45,6 +49,15 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SchedulingOpt
 builder.Services.AddSchedulingDatabase(builder.Configuration);
 
 builder.Services.AddAppointmentFeatures();
+
+// Publica auditoria pelo Outbox e mantém a projeção de pacientes com os eventos do cofre e do Consent.
+builder.Services
+    .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
+    .AddOutbox()
+    .AddConsumer<SchedulingDbContext>(consumers => consumers
+        .Handle<PatientRegistered, PatientRegisteredConsumer>()
+        .Handle<ConsentGranted, ConsentGrantedConsumer>()
+        .Handle<ConsentRevoked, ConsentRevokedConsumer>());
 
 var app = builder.Build();
 

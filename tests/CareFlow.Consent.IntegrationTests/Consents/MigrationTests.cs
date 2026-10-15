@@ -1,6 +1,6 @@
+using CareFlow.BuildingBlocks.Tenancy;
 using CareFlow.Consent.Api.Infrastructure.Persistence;
 using CareFlow.Consent.IntegrationTests.Infrastructure;
-using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;

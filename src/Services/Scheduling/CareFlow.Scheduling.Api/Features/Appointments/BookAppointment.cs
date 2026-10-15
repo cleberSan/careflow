@@ -3,13 +3,17 @@ using System.Security.Cryptography;
 using System.Text;
 
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Messaging.Outbox;
 using CareFlow.BuildingBlocks.Persistence;
 using CareFlow.BuildingBlocks.Results;
 using CareFlow.BuildingBlocks.Tenancy;
+using CareFlow.Scheduling.Api.Common;
 using CareFlow.Scheduling.Api.Common.Http;
 using CareFlow.Scheduling.Api.Common.Observability;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 using CareFlow.Scheduling.Domain.Appointments;
+using CareFlow.Scheduling.Domain.Patients;
 
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -36,6 +40,7 @@ internal sealed partial class BookAppointmentHandler(
     public async Task<Result<BookingOutcome>> HandleAsync(
         BookAppointmentRequest request,
         string idempotencyKey,
+        string actor,
         CancellationToken cancellationToken)
     {
         var fingerprint = Fingerprint(request);
@@ -46,6 +51,7 @@ internal sealed partial class BookAppointmentHandler(
             return Replay(existing, fingerprint);
         }
 
+        var now = time.GetUtcNow();
         var booking = Appointment.Book(
             new BookingRequest(
                 tenant.TenantId,
@@ -56,7 +62,7 @@ internal sealed partial class BookAppointmentHandler(
                 idempotencyKey,
                 fingerprint),
             policy,
-            time.GetUtcNow());
+            now);
 
         if (booking.IsFailure)
         {
@@ -64,43 +70,93 @@ internal sealed partial class BookAppointmentHandler(
         }
 
         var appointment = booking.Value;
-        db.Appointments.Add(appointment);
-
-        try
+        var saved = await SaveAsync(appointment, actor, now, cancellationToken).ConfigureAwait(false);
+        switch (saved)
         {
-            // O banco é a fonte da verdade: a exclusion constraint resolve a corrida entre reservas
-            // simultâneas, sem consulta prévia sujeita a TOCTOU.
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            case SaveOutcome.Saved:
+                metrics.Booked();
+                LogBooked(logger, appointment.Id, appointment.ProfessionalId);
+                return new BookingOutcome(appointment, Replayed: false);
+
+            case SaveOutcome.PatientUnknown:
+                metrics.Ineligible(PatientErrors.NotYetKnown.Code);
+                return PatientErrors.NotYetKnown;
+
+            case SaveOutcome.NoLegalBasis:
+                metrics.Ineligible(PatientErrors.NoLegalBasis.Code);
+                return PatientErrors.NoLegalBasis;
+
+            case SaveOutcome.SlotTaken:
+                // Retentativas simultâneas com a mesma chave disputam o mesmo horário, então a exclusion
+                // constraint pode disparar antes do índice de idempotência. Se a vencedora foi uma requisição
+                // com esta chave, é um replay, não um conflito.
+                var sameKey = await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken).ConfigureAwait(false);
+                if (sameKey is not null)
+                {
+                    return Replay(sameKey, fingerprint);
+                }
+
+                metrics.Conflict();
+                LogSlotConflict(logger, request.ProfessionalId);
+                return AppointmentErrors.SlotUnavailable;
+
+            default:
+                // Outra requisição com a mesma chave venceu a corrida: responde com o resultado dela.
+                var winner = await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException("Violação de idempotência sem registro correspondente.");
+                return Replay(winner, fingerprint);
         }
-        catch (DbUpdateException ex) when (ex.IsExclusionViolation(AppointmentConfiguration.NoOverlapConstraint))
-        {
-            db.Entry(appointment).State = EntityState.Detached;
+    }
 
-            // Retentativas simultâneas com a mesma chave disputam o mesmo horário, então a exclusion
-            // constraint pode disparar antes do índice de idempotência. Se a vencedora foi uma requisição
-            // com esta chave, é um replay, não um conflito.
-            var sameKey = await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken).ConfigureAwait(false);
-            if (sameKey is not null)
+    /// <summary>
+    /// Numa transação: trava a projeção do paciente em modo compartilhado, confere a elegibilidade e grava a
+    /// consulta com o registro de auditoria. A trava serializa com a revogação: se ela for processada ao mesmo
+    /// tempo, ou espera esta reserva terminar (e então a cancela), ou esta reserva espera e vê o paciente revogado.
+    /// </summary>
+    private async Task<SaveOutcome> SaveAsync(Appointment appointment, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            var patient = await db.PatientStatuses
+                .FromSql($"SELECT * FROM patient_statuses WHERE tenant_id = {appointment.TenantId} AND patient_ref = {appointment.PatientRef} FOR SHARE")
+                .AsNoTracking()
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (patient is null)
             {
-                return Replay(sameKey, fingerprint);
+                return SaveOutcome.PatientUnknown;
             }
 
-            metrics.Conflict();
-            LogSlotConflict(logger, request.ProfessionalId);
-            return AppointmentErrors.SlotUnavailable;
-        }
-        catch (DbUpdateException ex) when (ex.IsUniqueViolation(AppointmentConfiguration.IdempotencyIndex))
-        {
-            // Outra requisição com a mesma chave venceu a corrida: responde com o resultado dela.
-            db.Entry(appointment).State = EntityState.Detached;
-            var winner = await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Violação de idempotência sem registro correspondente.", ex);
-            return Replay(winner, fingerprint);
-        }
+            var eligibility = patient.EnsureCanBook();
+            if (eligibility.IsFailure)
+            {
+                return eligibility.Error == PatientErrors.NotYetKnown ? SaveOutcome.PatientUnknown : SaveOutcome.NoLegalBasis;
+            }
 
-        metrics.Booked();
-        LogBooked(logger, appointment.Id, appointment.ProfessionalId);
-        return new BookingOutcome(appointment, Replayed: false);
+            db.Appointments.Add(appointment);
+            db.RecordAccess(
+                appointment.TenantId, SchedulingAudit.SourceService, actor, "appointment.booked", SchedulingAudit.ResourceType, appointment.PatientRef, now);
+
+            try
+            {
+                // O banco é a fonte da verdade: a exclusion constraint resolve a corrida entre reservas
+                // simultâneas, sem consulta prévia sujeita a TOCTOU.
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return SaveOutcome.Saved;
+            }
+            catch (DbUpdateException ex) when (ex.IsExclusionViolation(AppointmentConfiguration.NoOverlapConstraint))
+            {
+                db.ChangeTracker.Clear();
+                return SaveOutcome.SlotTaken;
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation(AppointmentConfiguration.IdempotencyIndex))
+            {
+                db.ChangeTracker.Clear();
+                return SaveOutcome.KeyTaken;
+            }
+        }
     }
 
     internal static string Fingerprint(BookAppointmentRequest request)
@@ -131,6 +187,15 @@ internal sealed partial class BookAppointmentHandler(
         return new BookingOutcome(existing, Replayed: true);
     }
 
+    private enum SaveOutcome
+    {
+        Saved,
+        PatientUnknown,
+        NoLegalBasis,
+        SlotTaken,
+        KeyTaken,
+    }
+
     [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "Consulta {AppointmentId} reservada para o profissional {ProfessionalId}")]
     private static partial void LogBooked(ILogger logger, Guid appointmentId, Guid professionalId);
 
@@ -153,7 +218,7 @@ internal static class BookAppointmentEndpoint
             return key.Error.ToProblem();
         }
 
-        var result = await handler.HandleAsync(request, key.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(request, key.Value, AuditActor.From(response.HttpContext.User), cancellationToken).ConfigureAwait(false);
         if (result.IsFailure)
         {
             return result.Error.ToProblem();

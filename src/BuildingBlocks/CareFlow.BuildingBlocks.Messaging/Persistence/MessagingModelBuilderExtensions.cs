@@ -1,6 +1,7 @@
+using System.Linq.Expressions;
+
 using CareFlow.BuildingBlocks.Messaging.Inbox;
 using CareFlow.BuildingBlocks.Messaging.Outbox;
-using System.Linq.Expressions;
 
 using Microsoft.EntityFrameworkCore;
 
