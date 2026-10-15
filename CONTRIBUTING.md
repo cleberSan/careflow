@@ -9,7 +9,7 @@
 
 ## Rodando localmente
 
-Pré-requisitos: .NET SDK 10 (versão em `global.json`) e Docker (os testes de integração sobem um PostgreSQL com Testcontainers).
+Pré-requisitos: .NET SDK 10 (versão em `global.json`) e Docker (os testes de integração sobem PostgreSQL e, nos testes de ponta a ponta, RabbitMQ com Testcontainers).
 
 ```bash
 dotnet restore
@@ -20,13 +20,17 @@ dotnet test -c Release --coverlet --coverlet-output-format cobertura
 
 Para usar um PostgreSQL já existente nos testes de integração, defina `CAREFLOW_TEST_POSTGRES` com a connection string.
 
-### Banco local
+`tests/CareFlow.EndToEndTests` sobe os quatro serviços num processo, com PostgreSQL e RabbitMQ reais, e cobre a propagação da revogação, broker fora do ar, duplicatas, desordem e mensagens mortas.
+
+### Banco e broker locais
 
 ```bash
-docker compose up -d postgres
+docker compose up -d
 ```
 
-O script `deploy/postgres/init-dev.sql` cria o banco do Patient Vault e os logins das APIs (`scheduling_api`, `vault_api`), sem superusuário, para que o Row-Level Security valha também em desenvolvimento. As migrations rodam com o papel `careflow` (connection string `...Migrations`). Se o seu volume é anterior à fase 3, recrie-o uma vez: `docker compose down -v && docker compose up -d postgres`.
+O script `deploy/postgres/init-dev.sql` cria um banco por serviço, os logins das APIs (`*_api`) e dos despachantes de mensagens (`*_dispatcher`), todos sem superusuário, para que o Row-Level Security valha também em desenvolvimento. As migrations rodam com o papel `careflow` (connection string `...Migrations`). Se o seu volume é anterior à fase 4, recrie-o uma vez: `docker compose down -v && docker compose up -d`.
+
+O RabbitMQ local fica em `localhost:5672` (painel em `http://localhost:15672`, usuário `careflow`, senha `careflow-dev`, só para desenvolvimento). Com o broker fora, os serviços continuam atendendo e os eventos esperam no Outbox (ADR-0006).
 
 ### Subindo a API de agenda
 
@@ -57,6 +61,23 @@ dotnet user-jwts create --project src/Services/PatientVault/CareFlow.PatientVaul
 
 Perder essa chave torna ilegíveis os pacientes cadastrados localmente. O provedor local é recusado em `Production`. Há requisições de exemplo, só com dados sintéticos, em `CareFlow.PatientVault.Api.http`.
 
+### Subindo Consent e Audit
+
+```bash
+dotnet run --project src/Services/Consent/CareFlow.Consent.Api
+dotnet user-jwts create --project src/Services/Consent/CareFlow.Consent.Api \
+  --scope "consent.read consent.write" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+
+# A auditoria assina a cadeia com uma chave HMAC de 32 bytes, guardada fora do banco e do repositório.
+dotnet user-secrets set "Audit:Chain:Keys:dev-1" "$(openssl rand -base64 32)" \
+  --project src/Services/Audit/CareFlow.Audit.Api
+dotnet run --project src/Services/Audit/CareFlow.Audit.Api
+dotnet user-jwts create --project src/Services/Audit/CareFlow.Audit.Api \
+  --scope audit.read --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+```
+
+Perder a chave da auditoria impede verificar as entradas assinadas com ela (ADR-0007).
+
 ### Migrations
 
 ```bash
@@ -65,7 +86,13 @@ dotnet ef migrations add NomeDaMigration --project src/Services/Scheduling/CareF
   --output-dir Infrastructure/Persistence/Migrations
 ```
 
-Toda tabela nova com `tenant_id` precisa de `EnableTenantRowLevelSecurity` na migration (ADR-0003).
+Toda tabela nova com `tenant_id` precisa de `EnableTenantRowLevelSecurity` na migration (ADR-0003). Outbox e Inbox usam `EnableOutboxSecurity` e `EnableInboxSecurity`, que também liberam o papel do despachante (ADR-0006).
+
+### Eventos
+
+- Publique pelo Outbox (`db.Enqueue(...)` ou `db.RecordAccess(...)`) antes do `SaveChanges`, nunca direto no broker: o evento e a mudança gravam juntos ou não gravam.
+- Consumidores implementam `IIntegrationEventConsumer<TEvent>` e precisam tolerar desordem; duplicatas o Inbox já descarta.
+- Eventos carregam só pseudônimos. O tipo do evento não muda depois de publicado: crie um tipo novo (`.v2`).
 
 ## Padrões
 

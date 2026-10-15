@@ -11,7 +11,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - careflow-postgres:/var/lib/postgresql/data
-      # Cria o banco do Patient Vault e os logins das APIs (sem superusuário, sujeitos ao RLS).
+      # Cria os bancos de cada serviço e os logins das APIs e despachantes (sem superusuário, sujeitos ao RLS).
       - ./deploy/postgres/init-dev.sql:/docker-entrypoint-initdb.d/init-dev.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U careflow -d careflow_scheduling"]
@@ -19,5 +19,24 @@ services:
       timeout: 3s
       retries: 10
 
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      # Credenciais só de desenvolvimento; a porta fica presa ao loopback.
+      RABBITMQ_DEFAULT_USER: careflow
+      RABBITMQ_DEFAULT_PASS: careflow-dev
+    ports:
+      - "127.0.0.1:5672:5672"
+      # Painel de administração em http://localhost:15672
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - careflow-rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   careflow-postgres:
+  careflow-rabbitmq:
