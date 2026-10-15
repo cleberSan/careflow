@@ -1,10 +1,14 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 
 using CareFlow.Audit.Api.Features.Entries;
 using CareFlow.Audit.Api.Infrastructure.Persistence;
 using CareFlow.Audit.Domain.Chain;
 using CareFlow.Audit.IntegrationTests.Infrastructure;
+using CareFlow.BuildingBlocks.Messaging.Consuming;
+using CareFlow.BuildingBlocks.Messaging.Inbox;
 using CareFlow.BuildingBlocks.Tenancy;
+using CareFlow.Contracts;
 using CareFlow.Testing;
 
 using Microsoft.AspNetCore.Hosting;
@@ -71,6 +75,16 @@ public sealed class AuditApiFixture : IAsyncLifetime
         await using var scope = Factory.Services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<TenantScope>().Enter(scopeTenant);
         return await scope.ServiceProvider.GetRequiredService<AuditWriter>().AppendAsync(auditEvent, cancellationToken);
+    }
+
+    /// <summary>Entrega um evento ao consumidor da auditoria, pelo mesmo processador de Inbox usado com o RabbitMQ.</summary>
+    public async Task<ProcessOutcome> DeliverAsync<TEvent>(Guid tenantId, TEvent @event, Guid messageId)
+        where TEvent : IIntegrationEvent
+    {
+        var processor = Factory.Services.GetRequiredService<InboxProcessor<AuditDbContext>>();
+        var body = JsonSerializer.SerializeToUtf8Bytes(@event, JsonSerializerOptions.Web);
+        var context = new MessageContext(messageId, tenantId, TEvent.EventType, DateTimeOffset.UtcNow);
+        return await processor.ProcessAsync(context, body, TestContext.Current.CancellationToken);
     }
 
     public HttpClient CreateClient(Guid? tenantId, params string[] scopes)
