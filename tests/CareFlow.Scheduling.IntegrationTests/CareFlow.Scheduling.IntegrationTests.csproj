@@ -8,8 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.MTP" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
 
@@ -18,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CareFlow.Testing\CareFlow.Testing.csproj" />
     <ProjectReference Include="..\..\src\Services\Scheduling\CareFlow.Scheduling.Api\CareFlow.Scheduling.Api.csproj" />
   </ItemGroup>
 

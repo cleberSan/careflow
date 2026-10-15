@@ -125,6 +125,25 @@ public sealed class AppointmentLifecycleTests(SchedulingApiFixture api)
     }
 
     [Fact]
+    public async Task List_FromAnotherClinic_DoesNotShowItsSlots()
+    {
+        // Arrange
+        var startsAt = FutureSlot();
+        await BookAsync(api.CreateClient(_tenant, Write), startsAt);
+        var otherClinic = api.CreateClient(Guid.NewGuid(), Read);
+
+        // Act
+        var slots = await otherClinic.GetFromJsonAsync<BusySlotResponse[]>(
+            $"/v1/professionals/{_professional}/appointments?from={Uri.EscapeDataString(startsAt.ToString("O"))}&to={Uri.EscapeDataString(startsAt.AddHours(1).ToString("O"))}",
+            Json,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(slots);
+        Assert.Empty(slots);
+    }
+
+    [Fact]
     public async Task List_DoesNotExposePatient()
     {
         // Arrange

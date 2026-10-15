@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>CareFlow.PatientVault.Api</RootNamespace>
+    <UserSecretsId>careflow-patient-vault-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.AspNetCore\CareFlow.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks.Persistence\CareFlow.BuildingBlocks.Persistence.csproj" />
+    <ProjectReference Include="..\CareFlow.PatientVault.Domain\CareFlow.PatientVault.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CareFlow.PatientVault.UnitTests" />
+    <InternalsVisibleTo Include="CareFlow.PatientVault.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

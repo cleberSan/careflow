@@ -32,6 +32,12 @@ public sealed record Error
 
     public static Error Forbidden(string code, string message) => Create(code, message, ErrorType.Forbidden);
 
+    /// <summary>A versão informada pelo cliente (If-Match) não é mais a atual.</summary>
+    public static Error PreconditionFailed(string code, string message) => Create(code, message, ErrorType.PreconditionFailed);
+
+    /// <summary>A operação exige uma pré-condição (If-Match) que o cliente não enviou.</summary>
+    public static Error PreconditionRequired(string code, string message) => Create(code, message, ErrorType.PreconditionRequired);
+
     private static Error Create(string code, string message, ErrorType type)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);

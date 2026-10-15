@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-using CareFlow.Scheduling.Api.Common.Tenancy;
+using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -17,11 +17,6 @@ internal sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<S
             .UseNpgsql("Host=localhost;Database=careflow_scheduling")
             .Options;
 
-        return new SchedulingDbContext(options, new DesignTimeTenant());
-    }
-
-    private sealed class DesignTimeTenant : ITenantContext
-    {
-        public Guid TenantId => Guid.Empty;
+        return new SchedulingDbContext(options, NoTenantContext.Instance);
     }
 }

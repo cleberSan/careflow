@@ -1,8 +1,9 @@
 using System.Text.Json.Serialization;
 
+using CareFlow.BuildingBlocks.AspNetCore.Observability;
+using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.Scheduling.Api.Common.Observability;
 using CareFlow.Scheduling.Api.Common.Security;
-using CareFlow.Scheduling.Api.Common.Tenancy;
 using CareFlow.Scheduling.Api.Features.Appointments;
 using CareFlow.Scheduling.Api.Infrastructure;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
@@ -15,7 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = 16 * 1024);
 
-builder.AddObservability();
+builder.AddCareFlowObservability("careflow-scheduling", SchedulingMetrics.MeterName);
+builder.Services.AddSingleton<SchedulingMetrics>();
 
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(json =>
@@ -28,8 +30,7 @@ builder.Services
     .AddJwtBearer(options => options.MapInboundClaims = false);
 builder.Services.AddAuthorizationBuilder().AddSchedulingPolicies();
 
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddHttpTenantContext();
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddOptions<SchedulingOptions>()
@@ -42,7 +43,6 @@ builder.Services.AddOptions<SchedulingOptions>()
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SchedulingOptions>>().Value.ToPolicy());
 
 builder.Services.AddSchedulingDatabase(builder.Configuration);
-builder.Services.AddHealthChecks().AddDbContextCheck<SchedulingDbContext>(tags: ["ready"]);
 
 builder.Services.AddAppointmentFeatures();
 

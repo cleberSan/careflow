@@ -2,10 +2,12 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
+using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.Persistence;
 using CareFlow.BuildingBlocks.Results;
+using CareFlow.BuildingBlocks.Tenancy;
 using CareFlow.Scheduling.Api.Common.Http;
 using CareFlow.Scheduling.Api.Common.Observability;
-using CareFlow.Scheduling.Api.Common.Tenancy;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 using CareFlow.Scheduling.Domain.Appointments;
 

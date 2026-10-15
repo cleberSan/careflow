@@ -1,7 +1,7 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "include": "[CareFlow.Scheduling.Api]*",
+      "include": "[CareFlow.Scheduling.Api]*,[CareFlow.BuildingBlocks.AspNetCore]*,[CareFlow.BuildingBlocks.Persistence]*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

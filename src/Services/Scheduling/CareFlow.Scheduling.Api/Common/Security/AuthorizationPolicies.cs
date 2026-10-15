@@ -1,3 +1,5 @@
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+
 using Microsoft.AspNetCore.Authorization;
 
 namespace CareFlow.Scheduling.Api.Common.Security;
@@ -12,13 +14,6 @@ internal static class AuthorizationPolicies
 
     public static AuthorizationBuilder AddSchedulingPolicies(this AuthorizationBuilder builder) =>
         builder
-            .AddPolicy(Read, policy => policy
-                .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasTenant(ctx) && ctx.User.HasAnyScope(ReadScope, WriteScope)))
-            .AddPolicy(Write, policy => policy
-                .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasTenant(ctx) && ctx.User.HasAnyScope(WriteScope)));
-
-    private static bool HasTenant(AuthorizationHandlerContext context) =>
-        ClaimsPrincipalExtensions.TryGetTenantId(context.User, out _);
+            .AddTenantScopePolicy(Read, ReadScope, WriteScope)
+            .AddTenantScopePolicy(Write, WriteScope);
 }

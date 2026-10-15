@@ -1,57 +1,51 @@
+using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 using CareFlow.Scheduling.IntegrationTests.Infrastructure;
+using CareFlow.Testing;
 
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.DependencyInjection;
-
-using Testcontainers.PostgreSql;
 
 [assembly: AssemblyFixture(typeof(SchedulingApiFixture))]
 
 namespace CareFlow.Scheduling.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Um PostgreSQL real por execução (Testcontainers) e uma instância da API compartilhada.
+/// Um PostgreSQL real por execução e uma instância da API compartilhada. As migrations rodam com o papel
+/// de admin e a API conecta com um login sem privilégios, como em produção, então o RLS vale nos testes.
 /// Cada teste usa uma clínica nova, então os dados não se misturam sem precisar limpar o banco.
-/// Defina CAREFLOW_TEST_POSTGRES para usar um banco já existente em vez do container.
 /// </summary>
 public sealed class SchedulingApiFixture : IAsyncLifetime
 {
-    private PostgreSqlContainer? _container;
+    private PostgresTestServer? _postgres;
+    private ApplicationLogin? _login;
     private WebApplicationFactory<Program>? _factory;
+
+    /// <summary>Connection string do login da API (sem superusuário, sujeito ao RLS).</summary>
+    public string ApplicationConnectionString =>
+        _login?.ConnectionString ?? throw new InvalidOperationException("Fixture não inicializada.");
+
+    public string AdminConnectionString =>
+        _postgres?.AdminConnectionString ?? throw new InvalidOperationException("Fixture não inicializada.");
 
     public async ValueTask InitializeAsync()
     {
-        var connectionString = Environment.GetEnvironmentVariable("CAREFLOW_TEST_POSTGRES");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
-            await _container.StartAsync();
-            connectionString = _container.GetConnectionString();
-        }
+        _postgres = await PostgresTestServer.StartAsync();
+        _login = _postgres.NewApplicationLogin("scheduling_api_test");
 
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Testing");
-            builder.UseSetting("ConnectionStrings:Scheduling", connectionString);
+            builder.UseSetting("ConnectionStrings:Scheduling", _login.ConnectionString);
+            builder.UseSetting("ConnectionStrings:SchedulingMigrations", _postgres.AdminConnectionString);
             builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
-            builder.ConfigureTestServices(services =>
-            {
-                services.AddAuthentication(TestAuthHandler.SchemeName)
-                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
-                services.Configure<AuthenticationOptions>(options =>
-                {
-                    options.DefaultScheme = TestAuthHandler.SchemeName;
-                    options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
-                    options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
-                });
-            });
+            builder.ConfigureTestServices(services => services.AddTestAuthentication());
         });
 
-        // Sobe a aplicação (e aplica as migrations) uma única vez.
+        // Sobe a aplicação (e aplica as migrations, que criam o papel da aplicação) uma única vez.
+        // A API só conecta na primeira requisição, então o login pode ser criado logo depois.
         _ = _factory.Server;
+        await _postgres.CreateLoginAsync(_login, DatabaseExtensions.ApplicationRole);
     }
 
     public HttpClient CreateClient(Guid? tenantId, params string[] scopes)
@@ -79,9 +73,9 @@ public sealed class SchedulingApiFixture : IAsyncLifetime
             await _factory.DisposeAsync();
         }
 
-        if (_container is not null)
+        if (_postgres is not null)
         {
-            await _container.DisposeAsync();
+            await _postgres.DisposeAsync();
         }
     }
 
