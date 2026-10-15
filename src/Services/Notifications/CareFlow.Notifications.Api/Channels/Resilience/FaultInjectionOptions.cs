@@ -45,20 +45,23 @@ internal sealed class FaultInjectionOptions
 {
     public const string SectionName = "FaultInjection";
 
+    public const int MaxIsolatedSlots = 64;
+
     public bool Enabled { get; set; }
 
     /// <summary>Por canal, pelo nome em minúsculas: <c>whatsapp</c>, <c>sms</c>, <c>email</c>.</summary>
     public Dictionary<string, ChannelFaultOptions> Channels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Clínicas isoladas (o pool do demo, ADR-0010): cada uma tem circuit breaker próprio por canal e pode ligar
-    /// falhas só para si pela API. As demais compartilham um circuito por canal. Lista fixa e curta, para a memória
-    /// dos pipelines ser limitada.
+    /// Quantas partições isoladas existem (ADR-0010). Cada sessão do Painel registra a clínica sintética dela numa
+    /// partição livre e ganha circuit breaker próprio por canal, podendo ligar falhas só para si pela API; as demais
+    /// clínicas compartilham um circuito por canal. O rótulo é o número da partição, nunca a clínica: a
+    /// cardinalidade das métricas e a memória dos pipelines ficam limitadas a este número.
     /// </summary>
-    [MaxLength(64)]
-    public List<Guid> IsolatedClinics { get; set; } = [];
+    [Range(0, MaxIsolatedSlots)]
+    public int IsolatedSlots { get; set; }
 
-    /// <summary>Libera a API de falhas por clínica (só para as clínicas isoladas). Recusada em produção.</summary>
+    /// <summary>Libera a API de falhas por clínica (só para clínicas registradas numa partição). Recusada em produção.</summary>
     public bool ClinicOverridesEnabled { get; set; }
 
     public ChannelFaultOptions? For(Channel channel) =>

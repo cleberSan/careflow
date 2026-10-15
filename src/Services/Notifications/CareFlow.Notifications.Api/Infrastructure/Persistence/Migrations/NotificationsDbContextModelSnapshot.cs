@@ -154,6 +154,38 @@ namespace CareFlow.Notifications.Api.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CareFlow.Notifications.Api.Infrastructure.Persistence.ClinicPartition", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("Slot")
+                        .HasColumnType("integer")
+                        .HasColumnName("slot");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_clinic_partitions");
+
+                    b.HasIndex("Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ux_clinic_partitions_slot");
+
+                    b.ToTable("clinic_partitions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_clinic_partitions_slot", "slot BETWEEN 1 AND 64");
+                        });
+                });
+
             modelBuilder.Entity("CareFlow.Notifications.Api.Infrastructure.Persistence.NotificationJob", b =>
                 {
                     b.Property<Guid>("NotificationId")

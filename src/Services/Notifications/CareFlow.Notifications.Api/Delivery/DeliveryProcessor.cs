@@ -103,7 +103,7 @@ internal sealed partial class DeliveryProcessor(
         {
             var clinic = await ProjectionStore.ClinicSettingsAsync(db, notification.TenantId, settings.DefaultClinicName, cancellationToken).ConfigureAwait(false);
             var text = MessageComposer.Compose(notification, clinic);
-            var plan = await faults.PlanAsync(notification.TenantId, cancellationToken).ConfigureAwait(false);
+            var plan = await faults.PlanAsync(cancellationToken).ConfigureAwait(false);
             routing = await router.SendAsync(notification, lookup.Contact!, text, clinic.ChannelOrder, round, plan, cancellationToken).ConfigureAwait(false);
         }
 

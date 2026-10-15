@@ -1,3 +1,4 @@
+using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Domain.Appointments;
 using CareFlow.Notifications.Domain.Channels;
 using CareFlow.Notifications.Domain.Clinics;
@@ -176,5 +177,23 @@ internal sealed class ClinicSettingsConfiguration : IEntityTypeConfiguration<Cli
         builder.Property(s => s.ReminderLead).HasColumnName("reminder_lead");
         builder.Property(s => s.UpdatedAt).HasColumnName("updated_at");
         builder.Property<uint>("Version").IsRowVersion();
+    }
+}
+
+internal sealed class ClinicPartitionConfiguration : IEntityTypeConfiguration<ClinicPartition>
+{
+    public const string TableName = "clinic_partitions";
+    public const string SlotIndex = "ux_clinic_partitions_slot";
+
+    public void Configure(EntityTypeBuilder<ClinicPartition> builder)
+    {
+        builder.ToTable(TableName, table =>
+            table.HasCheckConstraint("ck_clinic_partitions_slot", $"slot BETWEEN 1 AND {FaultInjectionOptions.MaxIsolatedSlots}"));
+        builder.HasKey(p => p.TenantId).HasName("pk_clinic_partitions");
+        builder.Property(p => p.TenantId).HasColumnName("tenant_id");
+        builder.Property(p => p.Slot).HasColumnName("slot");
+        builder.Property(p => p.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
+        builder.HasIndex(p => p.Slot).IsUnique().HasDatabaseName(SlotIndex);
     }
 }

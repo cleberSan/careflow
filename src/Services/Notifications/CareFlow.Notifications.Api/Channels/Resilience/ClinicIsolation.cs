@@ -1,37 +1,30 @@
-using System.Collections.Frozen;
-
 using Microsoft.Extensions.Options;
 
 namespace CareFlow.Notifications.Api.Channels.Resilience;
 
 /// <summary>
 /// Em qual partição de circuit breaker uma clínica cai. As clínicas de produção dividem um circuito por canal
-/// (um provedor fora do ar está fora para todos). As clínicas isoladas, do pool do demo, têm o próprio: a falha que
-/// um visitante injeta abre só o circuito da clínica dele. O rótulo é o índice no pool, nunca o id da clínica.
+/// (um provedor fora do ar está fora para todos). Uma clínica sintética do Painel, registrada numa partição isolada
+/// com prazo (<see cref="Infrastructure.Persistence.ClinicPartition"/>), tem o próprio: a falha que um visitante
+/// injeta abre só o circuito da sessão dele. O rótulo é o número da partição, nunca o id da clínica.
 /// </summary>
-internal sealed class ClinicIsolation
+internal sealed class ClinicIsolation(IOptions<FaultInjectionOptions> options)
 {
     public const string Shared = "shared";
 
-    private readonly FrozenDictionary<Guid, string> _partitions;
+    public const int MinLeaseSeconds = 60;
+    public const int MaxLeaseSeconds = 3_600;
 
-    public ClinicIsolation(IOptions<FaultInjectionOptions> options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        _partitions = options.Value.IsolatedClinics
-            .Distinct()
-            .Select((clinic, index) => (clinic, label: $"isolated-{index + 1:00}"))
-            .ToFrozenDictionary(entry => entry.clinic, entry => entry.label);
-        OverridesEnabled = options.Value.ClinicOverridesEnabled;
-    }
+    private readonly FaultInjectionOptions _options = options.Value;
 
-    public bool OverridesEnabled { get; }
+    /// <summary>Partições isoladas e a API de falhas por clínica: só fora de produção e com partições configuradas.</summary>
+    public bool OverridesEnabled => _options.ClinicOverridesEnabled && _options.IsolatedSlots > 0;
 
-    public IEnumerable<string> IsolatedPartitions => _partitions.Values;
+    public IEnumerable<string> IsolatedPartitions => Enumerable.Range(1, _options.IsolatedSlots).Select(Label);
 
-    public bool IsIsolated(Guid clinic) => _partitions.ContainsKey(clinic);
+    public bool IsValidSlot(int slot) => slot >= 1 && slot <= _options.IsolatedSlots;
 
-    public string PartitionFor(Guid clinic) => _partitions.TryGetValue(clinic, out var label) ? label : Shared;
+    public static string Label(int slot) => $"isolated-{slot:00}";
 }
 
 /// <summary>

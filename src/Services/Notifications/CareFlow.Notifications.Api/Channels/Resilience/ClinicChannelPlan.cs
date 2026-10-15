@@ -13,9 +13,10 @@ internal sealed record ClinicChannelPlan(string Partition, IReadOnlyDictionary<C
 }
 
 /// <summary>
-/// Monta o plano de envio da clínica do escopo: a falha gravada para a clínica (só clínicas isoladas, com a API de
-/// falhas liberada e dentro do prazo) vale no lugar da configuração geral. Lida a cada aviso, do banco: todas as
-/// instâncias do serviço enxergam a mesma falha, o que resolve o "falha por processo" do ADR-0009 para o demo.
+/// Monta o plano de envio da clínica do escopo (a do tenant, com RLS): se ela está numa partição isolada dentro do
+/// prazo, os envios contam no circuito dessa partição e a falha gravada para a clínica vale no lugar da
+/// configuração geral. Lido a cada aviso, do banco: todas as instâncias do serviço enxergam a mesma falha, o que
+/// resolve o "falha por processo" do ADR-0009 para o demo.
 /// </summary>
 internal sealed class ClinicFaultResolver(
     NotificationsDbContext db,
@@ -23,23 +24,44 @@ internal sealed class ClinicFaultResolver(
     IOptionsMonitor<FaultInjectionOptions> faults,
     TimeProvider time)
 {
-    public async Task<ClinicChannelPlan> PlanAsync(Guid clinic, CancellationToken cancellationToken)
+    /// <summary>A partição isolada vigente da clínica do escopo, ou nula se ela usa o circuito compartilhado.</summary>
+    public async Task<string?> ActivePartitionAsync(CancellationToken cancellationToken)
+    {
+        if (!isolation.OverridesEnabled)
+        {
+            return null;
+        }
+
+        var now = time.GetUtcNow();
+        var slot = await db.ClinicPartitions.AsNoTracking()
+            .Where(p => p.ExpiresAt > now)
+            .Select(p => (int?)p.Slot)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+        // Uma partição acima do configurado (configuração reduzida com sessões em curso) volta ao compartilhado.
+        return slot is { } value && isolation.IsValidSlot(value) ? ClinicIsolation.Label(value) : null;
+    }
+
+    public async Task<ClinicChannelPlan> PlanAsync(CancellationToken cancellationToken)
     {
         var general = faults.CurrentValue;
         var effective = Enum.GetValues<Channel>().ToDictionary(channel => channel, general.For);
 
-        if (isolation.OverridesEnabled && isolation.IsIsolated(clinic))
+        var partition = await ActivePartitionAsync(cancellationToken).ConfigureAwait(false);
+        if (partition is null)
         {
-            var now = time.GetUtcNow();
-            var overrides = await db.ChannelFaults.AsNoTracking()
-                .Where(f => f.ExpiresAt > now)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var fault in overrides)
-            {
-                effective[fault.Channel] = fault.ToOptions();
-            }
+            return new ClinicChannelPlan(ClinicIsolation.Shared, effective);
         }
 
-        return new ClinicChannelPlan(isolation.PartitionFor(clinic), effective);
+        var now = time.GetUtcNow();
+        var overrides = await db.ChannelFaults.AsNoTracking()
+            .Where(f => f.ExpiresAt > now)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var fault in overrides)
+        {
+            effective[fault.Channel] = fault.ToOptions();
+        }
+
+        return new ClinicChannelPlan(partition, effective);
     }
 }

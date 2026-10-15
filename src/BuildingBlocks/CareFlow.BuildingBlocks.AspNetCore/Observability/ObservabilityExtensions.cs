@@ -60,6 +60,7 @@ public static class ObservabilityExtensions
                 .AddAspNetCoreInstrumentation(options =>
                     options.Filter = context => !context.Request.Path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase))
                 .AddNpgsql()
+                .AddProcessor(new UnparentedQueryFilter())
                 .AddProcessor(new SpanRedactionProcessor()))
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()

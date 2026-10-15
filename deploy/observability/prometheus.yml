@@ -1,0 +1,15 @@
+# Prometheus local recebendo métricas por OTLP (--web.enable-otlp-receiver). Só desenvolvimento.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+otlp:
+  # Viram rótulos: o job (service.name) e a instância identificam o serviço nos painéis.
+  promote_resource_attributes:
+    - service.name
+    - service.instance.id
+    - deployment.environment.name
+
+storage:
+  tsdb:
+    out_of_order_time_window: 30m

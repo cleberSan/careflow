@@ -99,6 +99,19 @@ dotnet user-jwts create --project src/Services/Notifications/CareFlow.Notificati
 
 Os provedores são simulados: as mensagens ficam em memória, nada sai da máquina. Para ver o fallback, ligue a falha injetada no `appsettings.Development.json` (`FaultInjection:Enabled` e o modo do canal: `Latency`, `Error`, `Unavailable` ou `LostResponse`); a mudança vale sem reiniciar.
 
+### Observabilidade local
+
+Collector, Tempo, Loki, Prometheus e Grafana sobem num perfil à parte do compose, só no loopback (ADR-0010):
+
+```bash
+docker compose --profile observability up -d
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317   # em cada terminal que roda um serviço
+```
+
+Sem essa variável os serviços não exportam nada. Abra http://localhost:3000: o painel inicial é "CareFlow · Visão geral" (latência por endpoint, Outbox, filas e mensagens mortas, atraso de entrega); "CareFlow · Privacidade e resiliência" mostra a propagação da revogação, envios e fallbacks por canal e o circuit breaker. Traces ficam no Explore com o Tempo, e de cada span dá para pular para os logs do mesmo trace no Loki. O login de administrador local é `admin`/`careflow-dev`; os dashboards vêm do repositório e se editados na interface não são salvos: altere o JSON em `deploy/observability/grafana/dashboards`.
+
+Os serviços já tiram dados pessoais da telemetria antes de exportar (caminhos viram o template da rota, CPF, e-mail e telefone viram marcadores). O Collector repete a regra como segunda barreira. Spans novos levam só pseudônimos mascarados (`LogMask.Pseudonym`), nunca nome, contato ou o identificador completo, e o teste `TelemetryPersonalDataTests` falha se algo escapar.
+
 ### Migrations
 
 ```bash
