@@ -1,4 +1,7 @@
+using System.Diagnostics;
+
 using CareFlow.BuildingBlocks.Tenancy;
+using CareFlow.Notifications.Api.Common.Observability;
 using CareFlow.Notifications.Api.Infrastructure;
 
 using Microsoft.Extensions.Options;
@@ -79,6 +82,7 @@ internal sealed partial class NotificationDispatcher(
 
     private async Task ProcessOneAsync(ClaimedJob job, CancellationToken cancellationToken)
     {
+        using var activity = NotificationsDiagnostics.StartDelivery(job.TraceParent);
         var scope = scopes.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
@@ -86,10 +90,12 @@ internal sealed partial class NotificationDispatcher(
             var processor = scope.ServiceProvider.GetRequiredService<DeliveryProcessor>();
             try
             {
-                await processor.ProcessAsync(job, cancellationToken).ConfigureAwait(false);
+                var outcome = await processor.ProcessAsync(job, cancellationToken).ConfigureAwait(false);
+                activity?.SetTag("careflow.notification.outcome", outcome.ToString().ToLowerInvariant());
             }
             catch (Exception ex) when (ex is not OutOfMemoryException && !cancellationToken.IsCancellationRequested)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
                 // A mensagem da exceção não leva dado pessoal: o contato nunca entra em exceções deste serviço.
                 LogProcessingFailed(logger, job.NotificationId, ex.GetType().Name, ex);
             }

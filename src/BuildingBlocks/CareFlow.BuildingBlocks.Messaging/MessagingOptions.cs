@@ -44,4 +44,8 @@ public sealed class MessagingOptions
 
     [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
     public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>De quanto em quanto tempo o Outbox pendente e as filas são medidos para as métricas.</summary>
+    [Range(typeof(TimeSpan), "00:00:00.100", "00:10:00")]
+    public TimeSpan MetricsInterval { get; set; } = TimeSpan.FromSeconds(10);
 }
