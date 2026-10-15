@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Contracts.Appointments;
 using CareFlow.Contracts.Consents;
 using CareFlow.Notifications.Api.Channels;
@@ -102,6 +103,8 @@ app.MapHealthChecks("/health/channels", new HealthCheckOptions
 });
 
 app.MapNotificationEndpoints();
+
+app.MapDemoPurgeIfEnabled(DatabaseExtensions.ConnectionStringName, AuthorizationPolicies.DemoPurge);
 
 await app.MigrateIfEnabledAsync().ConfigureAwait(false);
 await app.RunAsync().ConfigureAwait(false);

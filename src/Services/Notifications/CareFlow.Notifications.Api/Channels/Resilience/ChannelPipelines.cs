@@ -44,9 +44,8 @@ internal static class ChannelPipelines
                 MinimumThroughput = options.MinimumThroughput,
                 SamplingDuration = options.SamplingDuration,
                 BreakDuration = options.BreakDuration,
-                StateProvider = circuits.ProviderFor(channel, partition),
                 ManualControl = circuits.ControlFor(channel, partition),
-                OnOpened = _ => Report(circuits, channel, partition, ChannelCircuitState.Open),
+                OnOpened = args => Report(circuits, channel, partition, args.IsManual ? ChannelCircuitState.Isolated : ChannelCircuitState.Open),
                 OnHalfOpened = _ => Report(circuits, channel, partition, ChannelCircuitState.HalfOpen),
                 OnClosed = _ => Report(circuits, channel, partition, ChannelCircuitState.Closed),
             })

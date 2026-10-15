@@ -37,6 +37,77 @@ services:
       timeout: 5s
       retries: 10
 
+  # Observabilidade local (ADR-0010): docker compose --profile observability up -d
+  # Grafana em http://localhost:3000 (painéis em CareFlow). Os serviços exportam com
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317. Nada sai da máquina.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    depends_on: [tempo, loki, prometheus]
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    profiles: ["observability"]
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0"
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo.yaml:ro
+      - careflow-tempo:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+
+  loki:
+    image: grafana/loki:3.5.5
+    profiles: ["observability"]
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    # Exposto no loopback para o Demo ler os logs de um trace (ADR-0010).
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - careflow-loki:/loki
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-otlp-receiver
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - careflow-prometheus:/prometheus
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    profiles: ["observability"]
+    environment:
+      # Acesso anônimo só de leitura, porta presa ao loopback; nunca reutilize fora da sua máquina.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_ADMIN_PASSWORD: careflow-dev
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Nada é baixado em tempo de execução: a stack roda igual sem internet.
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/careflow-visao-geral.json
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, tempo, loki]
+
 volumes:
   careflow-postgres:
   careflow-rabbitmq:
+  careflow-tempo:
+  careflow-loki:
+  careflow-prometheus:

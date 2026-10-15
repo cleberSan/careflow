@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using CareFlow.BuildingBlocks.Messaging.Consuming;
@@ -41,8 +42,8 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
 {
     public static readonly TimeSpan BreakDuration = TimeSpan.FromMilliseconds(800);
 
-    /// <summary>O pool de clínicas isoladas do demo nestes testes; as demais usam o circuito compartilhado.</summary>
-    public static readonly Guid[] IsolatedClinics = [Guid.NewGuid(), Guid.NewGuid()];
+    /// <summary>Partições isoladas do demo nestes testes; clínicas sem partição usam o circuito compartilhado.</summary>
+    public const int IsolatedSlots = 4;
 
     private readonly MutableConfiguration _faults = new();
     private PostgresTestServer? _postgres;
@@ -100,10 +101,7 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
             builder.UseSetting("Notifications:Resilience:BreakDuration", BreakDuration.ToString("c"));
             builder.UseSetting("Vault:BaseAddress", "http://patient-vault.test/");
             builder.UseSetting("FaultInjection:ClinicOverridesEnabled", "true");
-            for (var i = 0; i < IsolatedClinics.Length; i++)
-            {
-                builder.UseSetting($"FaultInjection:IsolatedClinics:{i}", IsolatedClinics[i].ToString());
-            }
+            builder.UseSetting("FaultInjection:IsolatedSlots", IsolatedSlots.ToString(CultureInfo.InvariantCulture));
 
             builder.UseSetting("ServiceTokens:Local:PrivateKey", Vault.PrivateKeyBase64);
             builder.ConfigureAppConfiguration(configuration => configuration.Add(_faults));
@@ -215,6 +213,7 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
         await ExecuteAsAdminAsync("DELETE FROM notification_jobs");
 
         await ExecuteAsAdminAsync("DELETE FROM clinic_channel_faults");
+        await ExecuteAsAdminAsync("DELETE FROM clinic_partitions");
 
         // Fechar um circuito já fechado não zera as métricas de amostragem do Polly; isolar e fechar zera.
         var isolation = Services.GetRequiredService<ClinicIsolation>();

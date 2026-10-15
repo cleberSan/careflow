@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BuildingBlocks\CareFlow.BuildingBlocks\CareFlow.BuildingBlocks.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\CareFlow.BuildingBlocks.AspNetCore\CareFlow.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\CareFlow.BuildingBlocks.Persistence\CareFlow.BuildingBlocks.Persistence.csproj" />
   </ItemGroup>
 
 </Project>

@@ -42,6 +42,9 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Testes com cobertura (mínimo 80% de linhas)
+        env:
+          # O teste de gravação do Painel escreve aqui os quatro cenários (ADR-0010).
+          CAREFLOW_PANEL_RECORDING: ${{ github.workspace }}/panel-recording/panel.json
         run: >
           dotnet test -c Release --no-build
           --coverlet --coverlet-output-format cobertura
@@ -56,6 +59,14 @@ jobs:
           path: TestResults/
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Publicar gravação do Painel
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-recording
+          path: panel-recording/panel.json
+          retention-days: 30
+          if-no-files-found: error
 
   dependency-review:
     name: Revisão de dependências

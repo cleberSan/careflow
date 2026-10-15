@@ -1,4 +1,5 @@
 using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -15,10 +16,14 @@ internal static class AuthorizationPolicies
     public const string Write = "Vault.Write";
     public const string ContactRead = "Vault.ContactRead";
 
+    // Só existe no ambiente de demonstração (Demo:PurgeEnabled): o serviço Demo apaga a clínica sintética da sessão.
+    public const string DemoPurge = "Demo.Purge";
+
     // Diferente da agenda, escrita não implica leitura: quem só cadastra (ex.: integração de recepção)
     // não ganha acesso aos dados pessoais já gravados. Menor privilégio.
     public static AuthorizationBuilder AddVaultPolicies(this AuthorizationBuilder builder) =>
         builder
+            .AddTenantScopePolicy(DemoPurge, DemoPurgeEndpoint.Scope)
             .AddTenantScopePolicy(Read, ReadScope)
             .AddTenantScopePolicy(Write, WriteScope)
             // Contato é o mínimo para avisar o paciente, com escopo próprio: quem só envia avisos não lê o

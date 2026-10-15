@@ -1,0 +1,68 @@
+# OpenTelemetry Collector local: recebe OTLP dos serviços, aplica a segunda barreira de dados pessoais
+# e distribui para Tempo (traces), Loki (logs) e Prometheus (métricas). Só desenvolvimento (ADR-0010).
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  # Atributos que nunca devem sair: endereço do visitante, cabeçalhos e query strings.
+  attributes/strip:
+    actions:
+      - { key: client.address, action: delete }
+      - { key: network.peer.address, action: delete }
+      - { key: http.client_ip, action: delete }
+      - { key: url.query, action: delete }
+      - { pattern: ^http\.request\.header\..*, action: delete }
+      - { pattern: ^http\.response\.header\..*, action: delete }
+      - { key: user_agent.original, action: delete }
+
+  # Segunda barreira: mesmo que um valor com forma de e-mail, CPF ou telefone escape do serviço, ele é mascarado aqui.
+  redaction:
+    allow_all_keys: true
+    blocked_values:
+      - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+      - "\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b"
+      - "\\+?55[\\s(]*\\d{2}[\\s)]*9?\\d{4}[\\s-]?\\d{4}"
+    summary: info
+
+  batch:
+    timeout: 2s
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/strip, redaction, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/strip, redaction, batch]
+      exporters: [otlphttp/loki]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/strip, batch]
+      exporters: [otlphttp/prometheus]

@@ -1,4 +1,5 @@
 using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Persistence.Demo;
 
 using Microsoft.AspNetCore.Authorization;
 
@@ -12,9 +13,13 @@ internal static class AuthorizationPolicies
     public const string Read = "Notifications.Read";
     public const string Admin = "Notifications.Admin";
 
+    // Só existe no ambiente de demonstração (Demo:PurgeEnabled): o serviço Demo apaga a clínica sintética da sessão.
+    public const string DemoPurge = "Demo.Purge";
+
     // Quem configura a clínica também enxerga o histórico de envios dela; o contrário não vale.
     public static AuthorizationBuilder AddNotificationsPolicies(this AuthorizationBuilder builder) =>
         builder
+            .AddTenantScopePolicy(DemoPurge, DemoPurgeEndpoint.Scope)
             .AddTenantScopePolicy(Read, ReadScope, AdminScope)
             .AddTenantScopePolicy(Admin, AdminScope);
 }

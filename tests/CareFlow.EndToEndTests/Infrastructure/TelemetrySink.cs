@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 using OpenTelemetry;
@@ -20,9 +22,17 @@ namespace CareFlow.EndToEndTests.Infrastructure;
 /// <remarks>
 /// Os cinco serviços rodam num processo só, e um <c>TracerProvider</c> escuta todas as fontes do processo:
 /// cada span chega aqui uma vez por serviço. Para montar traces, use <see cref="Trace"/>, que desduplica por span.
+/// O serviço dono de cada span vem do contexto em que ele começou (<see cref="CurrentService"/>), marcado na
+/// subida de cada host e em cada requisição que ele atende, como cada processo saberia em produção.
 /// </remarks>
 public sealed class TelemetrySink
 {
+    /// <summary>Tag só de teste com o serviço dono do span.</summary>
+    public const string ServiceTag = "test.service";
+
+    /// <summary>Serviço em cujo contexto o código está rodando (host em subida, requisição atendida).</summary>
+    public static readonly AsyncLocal<string?> CurrentService = new();
+
     private readonly ConcurrentQueue<ExportedSpan> _spans = new();
     private readonly ConcurrentQueue<ExportedLog> _logs = new();
     private readonly ConcurrentQueue<ExportedMetric> _metrics = new();
@@ -35,10 +45,12 @@ public sealed class TelemetrySink
     public IReadOnlyCollection<ExportedMetric> Metrics => _metrics;
 
     /// <summary>Liga os exportadores de teste no serviço, depois dos que o próprio serviço registrou.</summary>
-    public void Attach(IServiceCollection services)
+    public void Attach(IServiceCollection services, string serviceName)
     {
-        services.ConfigureOpenTelemetryTracerProvider(tracing =>
-            tracing.AddProcessor(new SimpleActivityExportProcessor(new SpanExporter(this))));
+        services.AddSingleton<IStartupFilter>(new ServiceAttribution(serviceName));
+        services.ConfigureOpenTelemetryTracerProvider(tracing => tracing
+            .AddProcessor(new ServiceAttributionProcessor())
+            .AddProcessor(new SimpleActivityExportProcessor(new SpanExporter(this))));
         services.ConfigureOpenTelemetryLoggerProvider(logging =>
             logging.AddProcessor(new SimpleLogRecordExportProcessor(new LogExporter(this))));
         services.ConfigureOpenTelemetryMeterProvider(metrics =>
@@ -76,8 +88,42 @@ public sealed class TelemetrySink
             .Concat(_logs.Select(log => ("log", log.Content)))
             .Concat(_metrics.Select(metric => ("metric", metric.Content)));
 
+    /// <summary>Logs exportados de um trace, um por registro (sem repetir), em ordem.</summary>
+    public IReadOnlyList<ExportedLog> LogsOf(string traceId) =>
+        _logs.Where(log => log.TraceId == traceId).OrderBy(log => log.Timestamp).ToArray();
+
     private static string ServiceOf(BaseProvider? provider) =>
         provider?.GetResource().Attributes.FirstOrDefault(a => a.Key == "service.name").Value?.ToString() ?? "?";
+
+    /// <summary>Marca o span com o serviço do contexto em que ele começou, se ninguém marcou antes.</summary>
+    private sealed class ServiceAttributionProcessor : BaseProcessor<Activity>
+    {
+        public override void OnStart(Activity data)
+        {
+            if (CurrentService.Value is { } service && data.GetTagItem(ServiceTag) is null)
+            {
+                data.SetTag(ServiceTag, service);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Primeiro middleware de cada host: o span da requisição já começou no contexto de quem chamou (no mesmo
+    /// processo), então é corrigido aqui, e o que a requisição fizer depois fica no contexto deste serviço.
+    /// </summary>
+    private sealed class ServiceAttribution(string serviceName) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                Activity.Current?.SetTag(ServiceTag, serviceName);
+                CurrentService.Value = serviceName;
+                await nextMiddleware(context);
+            });
+            next(app);
+        };
+    }
 
     private sealed class SpanExporter(TelemetrySink sink) : BaseExporter<Activity>
     {
@@ -140,8 +186,10 @@ public sealed record ExportedSpan(
     string Name,
     ActivityKind Kind,
     DateTime StartedAt,
+    TimeSpan Duration,
     IReadOnlyDictionary<string, string?> Tags,
     IReadOnlyList<string> Events,
+    IReadOnlyList<ExportedEvent> EventDetails,
     ActivityStatusCode Status,
     string Content)
 {
@@ -154,6 +202,7 @@ public sealed record ExportedSpan(
             .Select(e => e.Name + "{" + string.Join(';', e.Tags.Select(tag => $"{tag.Key}={tag.Value}")) + "}")
             .ToArray();
         var parent = activity.ParentSpanId == default ? null : activity.ParentSpanId.ToHexString();
+        var owner = tags.GetValueOrDefault(TelemetrySink.ServiceTag) ?? service;
 
         // Tudo que o OTLP levaria: nome, atributos, eventos, links, status, baggage e tracestate.
         var content = string.Join(
@@ -167,7 +216,7 @@ public sealed record ExportedSpan(
             activity.TraceStateString);
 
         return new ExportedSpan(
-            service,
+            owner,
             activity.TraceId.ToHexString(),
             activity.SpanId.ToHexString(),
             parent,
@@ -175,8 +224,12 @@ public sealed record ExportedSpan(
             activity.DisplayName,
             activity.Kind,
             activity.StartTimeUtc,
+            activity.Duration,
             tags,
             events,
+            [.. activity.Events.Select(e => new ExportedEvent(
+                e.Name,
+                e.Tags.Select(tag => new KeyValuePair<string, string>(tag.Key, tag.Value?.ToString() ?? string.Empty)).ToArray()))],
             activity.Status,
             content);
     }
@@ -184,7 +237,9 @@ public sealed record ExportedSpan(
     public override string ToString() => $"{Service}:{Name} ({Source}, {Kind}) {SpanId}<-{ParentSpanId}";
 }
 
-public sealed record ExportedLog(string Service, string Category, string TraceId, string Content)
+public sealed record ExportedEvent(string Name, IReadOnlyList<KeyValuePair<string, string>> Attributes);
+
+public sealed record ExportedLog(string Service, string Category, string TraceId, DateTime Timestamp, string Severity, string Message, string Content)
 {
     public static ExportedLog From(string service, LogRecord record)
     {
@@ -198,7 +253,14 @@ public sealed record ExportedLog(string Service, string Category, string TraceId
             record.Body,
             attributes,
             record.Exception?.ToString());
-        return new ExportedLog(service, record.CategoryName ?? string.Empty, record.TraceId.ToHexString(), content);
+        return new ExportedLog(
+            service,
+            record.CategoryName ?? string.Empty,
+            record.TraceId.ToHexString(),
+            record.Timestamp,
+            record.LogLevel.ToString(),
+            record.FormattedMessage ?? record.Body ?? string.Empty,
+            content);
     }
 }
 
