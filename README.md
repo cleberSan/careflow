@@ -30,7 +30,7 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [x] **Fase 3:** Patient Vault com cifragem por campo e Row-Level Security ([ADR-0003](docs/adr/0003-row-level-security-por-clinica.md), [ADR-0004](docs/adr/0004-patient-vault-cifragem-por-campo.md))
 - [x] **Fase 4:** Consent e Audit com eventos, Outbox/Inbox e revogação propagada ([ADR-0006](docs/adr/0006-mensageria-outbox-inbox-rabbitmq.md), [ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md), [ADR-0008](docs/adr/0008-consentimento-e-propagacao-para-a-agenda.md))
 - [x] **Fase 5:** Notifications com fallback entre canais, circuit breaker e falhas injetáveis ([ADR-0009](docs/adr/0009-notificacoes-com-fallback-e-falhas-injetaveis.md))
-- [ ] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência
+- [x] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md))
 - [ ] **Fase 7:** Triagem com IA, pseudonimização e guardrails
 - [ ] **Fase 8:** Direitos do titular e adaptador HL7 FHIR
 - [ ] **Fase 9:** Testes de carga, IaC e deploy com canary
@@ -119,6 +119,15 @@ Avisos ao paciente em `src/Services/Notifications` ([ADR-0009](docs/adr/0009-not
 | `GET` | `/v1/appointments/{id}/notifications` | `notifications.read` |
 | `GET` | `/v1/settings` | `notifications.admin` |
 | `PUT` | `/v1/settings` | `notifications.admin` |
+
+### Observabilidade e Painel
+
+OpenTelemetry nos cinco serviços ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md)):
+
+- **Um trace por fluxo:** o contexto viaja no envelope do Outbox até o Inbox, então uma reserva é um trace só, da API da agenda ao aviso enviado, e uma revogação vai do Consent ao aviso de cancelamento e à auditoria.
+- **Sem dado pessoal na telemetria:** redação no serviço e no Collector, baggage de fora descartado, e um teste de ponta a ponta que varre spans, logs e métricas exportados atrás de nome, CPF, telefone e e-mail.
+- **Stack local:** Collector, Tempo, Loki, Prometheus e Grafana no docker compose, com dashboards versionados de latência, Outbox, mensagens mortas, propagação da revogação, fallbacks e circuit breaker.
+- **Painel de Privacidade e Resiliência:** o serviço `src/Services/Demo` é o backend do Painel, com sessão por cookie `__Host-`, clínica sintética e partição de circuit breaker por visitante, limites de uso e limpeza no fim. O CI grava os quatro cenários e o site reproduz a gravação, com data e commit.
 
 ### Mensageria
 

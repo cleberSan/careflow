@@ -112,6 +112,37 @@ Sem essa variável os serviços não exportam nada. Abra http://localhost:3000: 
 
 Os serviços já tiram dados pessoais da telemetria antes de exportar (caminhos viram o template da rota, CPF, e-mail e telefone viram marcadores). O Collector repete a regra como segunda barreira. Spans novos levam só pseudônimos mascarados (`LogMask.Pseudonym`), nunca nome, contato ou o identificador completo, e o teste `TelemetryPersonalDataTests` falha se algo escapar.
 
+### Subindo o Demo (backend do Painel)
+
+O Demo é o BFF do Painel de Privacidade e Resiliência (ADR-0010): cria uma clínica e um paciente sintéticos por visitante, chama os outros serviços com tokens curtos de um emissor local (HS256) e apaga os dados da clínica no fim da sessão. Não sobe em `Production`. Gere uma chave e entregue a mesma ao Demo e a cada serviço; o `appsettings.Development.json` dos serviços já aceita o emissor `careflow-demo-local` e as audiências `careflow-*`.
+
+```bash
+DEMO_KEY="$(openssl rand -base64 32)"
+dotnet user-secrets set "Demo:Tokens:SigningKey" "$DEMO_KEY" --project src/Services/Demo/CareFlow.Demo.Api
+for service in PatientVault Consent Scheduling Notifications Audit; do
+  project="src/Services/$service/CareFlow.$service.Api"
+  dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Issuer" "careflow-demo-local" --project "$project"
+  dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Value" "$DEMO_KEY" --project "$project"
+  dotnet user-secrets set "Demo:PurgeEnabled" "true" --project "$project"
+done
+unset DEMO_KEY
+
+dotnet run --project src/Services/Demo/CareFlow.Demo.Api
+```
+
+O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o Notifications aceitar partições isoladas, ligue `FaultInjection:Enabled`, `FaultInjection:ClinicOverridesEnabled` e `FaultInjection:IsolatedSlots` (por exemplo 8) nos user secrets dele. Com a stack de observabilidade de pé, o Demo lê traces do Tempo e logs do Loki; sem ela, o Painel mostra que a telemetria não está disponível. A sessão é um cookie `__Host-` e toda chamada precisa do cabeçalho `X-CareFlow-Demo: 1`; exemplos em `CareFlow.Demo.Api.http`.
+
+### Gravação do Painel
+
+O site não chama o Demo: ele reproduz uma gravação real dos quatro cenários. O teste `PanelRecordingTests` grava o arquivo quando a variável `CAREFLOW_PANEL_RECORDING` aponta para um caminho; o CI publica o resultado como artefato `panel-recording`.
+
+```bash
+CAREFLOW_PANEL_RECORDING=$PWD/panel.json CAREFLOW_COMMIT=$(git rev-parse HEAD) \
+  dotnet test --project tests/CareFlow.EndToEndTests -c Release -- --filter-class '*PanelRecordingTests'
+```
+
+Na gravação, CPF e telefone sintéticos saem só com os dois últimos dígitos, e o teste falha se algum dado pessoal aparecer fora da visão do cofre.
+
 ### Migrations
 
 ```bash

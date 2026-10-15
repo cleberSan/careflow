@@ -1,6 +1,6 @@
 # ADR-0009: Notificações com fallback entre canais e falhas injetáveis
 
-- Status: aceito
+- Status: aceito (clínicas isoladas e estado do circuito revistos no [ADR-0010](0010-observabilidade-e-painel-de-privacidade.md))
 - Data: 2026-10-15
 
 ## Contexto
