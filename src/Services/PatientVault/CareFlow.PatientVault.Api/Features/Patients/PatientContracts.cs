@@ -35,3 +35,9 @@ public sealed record PatientResponse(
 
     public override string ToString() => $"PatientResponse {{ PatientRef = {PatientRef}, *** }}";
 }
+
+/// <summary>O mínimo para avisar o paciente.</summary>
+public sealed record PatientContactResponse(string? Email, string? Phone)
+{
+    public override string ToString() => "PatientContactResponse { *** }";
+}

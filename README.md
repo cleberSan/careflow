@@ -29,7 +29,7 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [x] **Fase 2:** Scheduling MVP com prevenção de dupla reserva ([ADR-0002](docs/adr/0002-agenda-sem-dupla-reserva.md))
 - [x] **Fase 3:** Patient Vault com cifragem por campo e Row-Level Security ([ADR-0003](docs/adr/0003-row-level-security-por-clinica.md), [ADR-0004](docs/adr/0004-patient-vault-cifragem-por-campo.md))
 - [x] **Fase 4:** Consent e Audit com eventos, Outbox/Inbox e revogação propagada ([ADR-0006](docs/adr/0006-mensageria-outbox-inbox-rabbitmq.md), [ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md), [ADR-0008](docs/adr/0008-consentimento-e-propagacao-para-a-agenda.md))
-- [ ] **Fase 5:** Notifications com fallback e falhas injetáveis
+- [x] **Fase 5:** Notifications com fallback entre canais, circuit breaker e falhas injetáveis ([ADR-0009](docs/adr/0009-notificacoes-com-fallback-e-falhas-injetaveis.md))
 - [ ] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência
 - [ ] **Fase 7:** Triagem com IA, pseudonimização e guardrails
 - [ ] **Fase 8:** Direitos do titular e adaptador HL7 FHIR
@@ -74,6 +74,7 @@ Cofre de dados pessoais em `src/Services/PatientVault`. Os outros serviços só 
 | `GET` | `/v1/patients/{patientRef}` | `vault.read` |
 | `PUT` | `/v1/patients/{patientRef}` | `vault.write` + `If-Match` |
 | `POST` | `/v1/patients/lookup` | `vault.read` |
+| `GET` | `/v1/patients/{patientRef}/contact` | `vault.contact.read` (token de serviço) |
 
 ### Consent
 
@@ -91,7 +92,7 @@ Consentimentos e bases legais por finalidade em `src/Services/Consent` ([ADR-000
 
 ### Audit
 
-Trilha de auditoria em `src/Services/Audit` ([ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md)). Registra cada leitura e alteração de dado de paciente feita no cofre, no Consent e na agenda.
+Trilha de auditoria em `src/Services/Audit` ([ADR-0007](docs/adr/0007-auditoria-com-cadeia-hmac.md)). Registra cada leitura e alteração de dado de paciente feita no cofre, no Consent e na agenda, e cada aviso enviado ou não enviado pelo Notifications.
 
 - **Cadeia HMAC por clínica:** cada entrada encadeia a anterior com HMAC-SHA256 e chave fora do banco; a verificação aponta a primeira entrada adulterada, removida ou fora de ordem.
 - **Append-only no banco:** trigger recusa `UPDATE`, `DELETE` e `TRUNCATE`; a API só lê e insere.
@@ -100,6 +101,24 @@ Trilha de auditoria em `src/Services/Audit` ([ADR-0007](docs/adr/0007-auditoria-
 |---|---|---|
 | `GET` | `/v1/audit/entries?resourceId=&after=&limit=` | `audit.read` |
 | `GET` | `/v1/audit/verification` | `audit.read` |
+
+### Notifications
+
+Avisos ao paciente em `src/Services/Notifications` ([ADR-0009](docs/adr/0009-notificacoes-com-fallback-e-falhas-injetaveis.md)): confirmação ao marcar, lembrete antes do horário e aviso de cancelamento, inclusive quando o motivo é a revogação do consentimento.
+
+- **Fallback entre canais:** WhatsApp, SMS e e-mail na ordem configurada pela clínica, com timeout, retry com jitter e circuit breaker por canal (Polly v8 via `Microsoft.Extensions.Http.Resilience`).
+- **Sem mensagem duplicada:** chave de idempotência estável por aviso e canal, e consulta de status no provedor antes de cair para outro canal.
+- **Falhas injetáveis:** latência, erro, indisponibilidade e resposta perdida por canal, desligadas por padrão e ligadas por configuração sem reiniciar.
+- **Consentimento respeitado:** sem consentimento para `notifications`, o aviso é registrado como não enviado e o motivo vai para a auditoria.
+- **Contato só no cofre:** lido na hora do envio com token de serviço por clínica, nunca gravado nem logado; cada leitura e cada envio vão para a auditoria.
+- **Provedores simulados:** nenhum envio real; o pipeline de resiliência é o mesmo de produção.
+- **Observabilidade:** métricas por canal (envios, falhas, fallbacks, estado do circuito) e `/health/channels` com canal degradado.
+
+| Método | Rota | Escopo |
+|---|---|---|
+| `GET` | `/v1/appointments/{id}/notifications` | `notifications.read` |
+| `GET` | `/v1/settings` | `notifications.admin` |
+| `PUT` | `/v1/settings` | `notifications.admin` |
 
 ### Mensageria
 

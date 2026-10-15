@@ -137,6 +137,7 @@ internal sealed partial class BookAppointmentHandler(
             db.Appointments.Add(appointment);
             db.RecordAccess(
                 appointment.TenantId, SchedulingAudit.SourceService, actor, "appointment.booked", SchedulingAudit.ResourceType, appointment.PatientRef, now);
+            db.PublishBooked(appointment, now);
 
             try
             {

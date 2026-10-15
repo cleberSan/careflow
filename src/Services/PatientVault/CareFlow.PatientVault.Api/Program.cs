@@ -24,7 +24,8 @@ builder.Services.AddOpenApi();
 // Configuração do emissor em Authentication:Schemes:Bearer (Authority, ValidAudiences).
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => options.MapInboundClaims = false);
+    .AddJwtBearer(options => options.MapInboundClaims = false)
+    .AddInternalServiceTokens(builder.Configuration, builder.Environment);
 builder.Services.AddAuthorizationBuilder().AddVaultPolicies();
 
 builder.Services.AddHttpTenantContext();
