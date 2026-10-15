@@ -50,8 +50,8 @@ public sealed class OutboxMessage
         var occurredAt = ToStoragePrecision(now);
         return new OutboxMessage
         {
-            // Versão 7: ordenável por tempo, o que mantém o índice de pendentes compacto.
-            Id = Guid.CreateVersion7(now),
+            // Versão 7 crescente: ordena por criação (inclusive na mesma transação) e mantém o índice compacto.
+            Id = MonotonicGuid.Next(now),
             TenantId = tenantId,
             Type = TEvent.EventType,
             Payload = EventSerializer.Serialize(@event),
