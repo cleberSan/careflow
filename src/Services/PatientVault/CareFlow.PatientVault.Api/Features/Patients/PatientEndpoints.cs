@@ -30,6 +30,11 @@ internal static class PatientEndpoints
             .WithName("GetPatient")
             .WithSummary("Devolve os dados pessoais decifrados e o ETag da versão atual.");
 
+        patients.MapGet("/{patientRef:guid}/contact", GetPatientContactEndpoint.HandleAsync)
+            .RequireAuthorization(AuthorizationPolicies.ContactRead)
+            .WithName("GetPatientContact")
+            .WithSummary("Devolve só telefone e e-mail, para avisos ao paciente. Aceita token de serviço interno.");
+
         patients.MapPut("/{patientRef:guid}", UpdatePatientEndpoint.HandleAsync)
             .RequireAuthorization(AuthorizationPolicies.Write)
             .WithName("UpdatePatient")

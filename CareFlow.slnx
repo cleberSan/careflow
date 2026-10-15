@@ -17,6 +17,10 @@
     <Project Path="src/Services/Consent/CareFlow.Consent.Api/CareFlow.Consent.Api.csproj" />
     <Project Path="src/Services/Consent/CareFlow.Consent.Domain/CareFlow.Consent.Domain.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Notifications/">
+    <Project Path="src/Services/Notifications/CareFlow.Notifications.Api/CareFlow.Notifications.Api.csproj" />
+    <Project Path="src/Services/Notifications/CareFlow.Notifications.Domain/CareFlow.Notifications.Domain.csproj" />
+  </Folder>
   <Folder Name="/src/Services/PatientVault/">
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Api/CareFlow.PatientVault.Api.csproj" />
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Domain/CareFlow.PatientVault.Domain.csproj" />
@@ -32,6 +36,8 @@
     <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
     <Project Path="tests/CareFlow.EndToEndTests/CareFlow.EndToEndTests.csproj" />
+    <Project Path="tests/CareFlow.Notifications.IntegrationTests/CareFlow.Notifications.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Notifications.UnitTests/CareFlow.Notifications.UnitTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.IntegrationTests/CareFlow.PatientVault.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.UnitTests/CareFlow.PatientVault.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />

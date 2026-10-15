@@ -1,0 +1,29 @@
+# Requisições de exemplo (VS Code REST Client / Rider / Visual Studio).
+# Gere um token de desenvolvimento com:
+#   dotnet user-jwts create --project src/Services/Notifications/CareFlow.Notifications.Api \
+#     --scope notifications.admin --claim tenant_id=11111111-1111-1111-1111-111111111111
+@host = http://localhost:5154
+@token = cole-o-token-aqui
+
+### Configuração de avisos da clínica
+GET {{host}}/v1/settings
+Authorization: Bearer {{token}}
+
+### Ordem dos canais, nome nas mensagens, fuso e antecedência do lembrete
+PUT {{host}}/v1/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "displayName": "Clinica Exemplo",
+  "timeZone": "America/Sao_Paulo",
+  "channelOrder": ["WhatsApp", "Sms", "Email"],
+  "reminderLeadMinutes": 1440
+}
+
+### Avisos de uma consulta
+GET {{host}}/v1/appointments/00000000-0000-0000-0000-000000000000/notifications
+Authorization: Bearer {{token}}
+
+### Estado dos canais (circuit breaker)
+GET {{host}}/health/channels

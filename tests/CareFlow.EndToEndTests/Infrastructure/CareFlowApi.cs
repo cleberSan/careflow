@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace CareFlow.EndToEndTests.Infrastructure;
 
-/// <summary>Chamadas HTTP aos quatro serviços, como um cliente da clínica faria. Só dados sintéticos.</summary>
+/// <summary>Chamadas HTTP aos cinco serviços, como um cliente da clínica faria. Só dados sintéticos.</summary>
 public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -92,6 +92,25 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
         return (await response.Content.ReadFromJsonAsync<AppointmentView>(Json, Ct))!;
     }
 
+    public async Task CancelAsync(Guid appointmentId)
+    {
+        var response = await system.Scheduling.Client(Clinic, "scheduling.write").PostAsync($"/v1/appointments/{appointmentId}/cancel", null, Ct);
+        Assert.True(response.IsSuccessStatusCode, $"Cancelamento falhou: {response.StatusCode}");
+    }
+
+    /// <summary>Avisos da consulta no Notifications (vazio enquanto o evento não chegou).</summary>
+    public async Task<NotificationView[]> NotificationsAsync(Guid appointmentId)
+    {
+        var response = await system.Notifications.Client(Clinic, "notifications.read").GetAsync($"/v1/appointments/{appointmentId}/notifications", Ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return [];
+        }
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<NotificationView[]>(Json, Ct))!;
+    }
+
     public async Task<AuditEntryView[]> AuditTrailAsync(Guid resourceId)
     {
         var response = await system.Audit.Client(Clinic, "audit.read").GetAsync($"/v1/audit/entries?resourceId={resourceId}&limit=200", Ct);
@@ -124,6 +143,10 @@ public sealed record SyntheticPatient(string FullName, string Cpf, string Email,
 public sealed record BookingAttempt(HttpStatusCode Status, Guid? AppointmentId, string? Code);
 
 public sealed record AppointmentView(Guid Id, Guid PatientRef, string Status, string? CancellationReason);
+
+public sealed record NotificationView(Guid Id, string Kind, string Status, int Rounds, string? SentVia, string? NotSentReason, DeliveryAttemptView[] Attempts);
+
+public sealed record DeliveryAttemptView(int Round, string Channel, string Outcome, string? Error);
 
 public sealed record AuditEntryView(long Sequence, string SourceService, string Actor, string Action, string ResourceType, Guid ResourceId);
 

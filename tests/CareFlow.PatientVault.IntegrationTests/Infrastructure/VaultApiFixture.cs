@@ -26,6 +26,8 @@ public sealed class VaultApiFixture : IAsyncLifetime
 
     public CapturingLoggerProvider Logs { get; } = new();
 
+    internal InternalTokens InternalTokens { get; } = new();
+
     public string ApplicationConnectionString =>
         _login?.ConnectionString ?? throw new InvalidOperationException("Fixture não inicializada.");
 
@@ -47,6 +49,7 @@ public sealed class VaultApiFixture : IAsyncLifetime
             builder.UseSetting("KeyManagement:Provider", "Local");
             builder.UseSetting("KeyManagement:Local:ActiveKeyId", "test-1");
             builder.UseSetting("KeyManagement:Local:Keys:test-1", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+            builder.UseSetting("InternalAuth:PublicKey", InternalTokens.PublicKeyBase64);
             builder.ConfigureLogging(logging => logging
                 .AddProvider(Logs)
                 .AddFilter<CapturingLoggerProvider>(null, LogLevel.Trace));
@@ -75,6 +78,14 @@ public sealed class VaultApiFixture : IAsyncLifetime
 
     public HttpClient CreateAnonymousClient() => Factory.CreateClient();
 
+    /// <summary>Cliente com token de serviço interno (como o Notifications chama o cofre).</summary>
+    public HttpClient CreateServiceClient(string token)
+    {
+        var client = Factory.CreateClient();
+        InternalTokens.Authorize(client, token);
+        return client;
+    }
+
     /// <summary>Eventos no Outbox da clínica, em ordem de criação (lido como admin; a mensageria fica desligada).</summary>
     public Task<IReadOnlyList<OutboxRow>> OutboxAsync(Guid tenantId) =>
         OutboxRows.ReadAsync(AdminConnectionString, tenantId, TestContext.Current.CancellationToken);
@@ -92,6 +103,7 @@ public sealed class VaultApiFixture : IAsyncLifetime
         }
 
         Logs.Dispose();
+        InternalTokens.Dispose();
     }
 
     private WebApplicationFactory<Program> Factory =>

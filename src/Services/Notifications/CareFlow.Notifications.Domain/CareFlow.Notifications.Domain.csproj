@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>CareFlow.Notifications.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\CareFlow.BuildingBlocks\CareFlow.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+</Project>

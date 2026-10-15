@@ -78,6 +78,27 @@ dotnet user-jwts create --project src/Services/Audit/CareFlow.Audit.Api \
 
 Perder a chave da auditoria impede verificar as entradas assinadas com ela (ADR-0007).
 
+### Subindo o Notifications
+
+O Notifications lê telefone e e-mail no cofre na hora do envio, com um token de serviço curto por clínica (ADR-0009). Gere um par de chaves P-256 local: a privada fica nos user secrets do Notifications, a pública nos do cofre. O emissor local é recusado em `Production`.
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout -out /tmp/careflow-service-token.pem
+dotnet user-secrets set "ServiceTokens:Local:PrivateKey" \
+  "$(openssl pkcs8 -topk8 -nocrypt -in /tmp/careflow-service-token.pem -outform DER | base64 -w0)" \
+  --project src/Services/Notifications/CareFlow.Notifications.Api
+dotnet user-secrets set "InternalAuth:PublicKey" \
+  "$(openssl ec -in /tmp/careflow-service-token.pem -pubout -outform DER 2>/dev/null | base64 -w0)" \
+  --project src/Services/PatientVault/CareFlow.PatientVault.Api
+rm /tmp/careflow-service-token.pem
+
+dotnet run --project src/Services/Notifications/CareFlow.Notifications.Api
+dotnet user-jwts create --project src/Services/Notifications/CareFlow.Notifications.Api \
+  --scope "notifications.read notifications.admin" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+```
+
+Os provedores são simulados: as mensagens ficam em memória, nada sai da máquina. Para ver o fallback, ligue a falha injetada no `appsettings.Development.json` (`FaultInjection:Enabled` e o modo do canal: `Latency`, `Error`, `Unavailable` ou `LostResponse`); a mudança vale sem reiniciar.
+
 ### Migrations
 
 ```bash
