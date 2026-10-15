@@ -6,7 +6,7 @@ using Npgsql;
 namespace CareFlow.Notifications.Api.Delivery;
 
 /// <summary>Um aviso reservado para esta instância até <see cref="LockedUntil"/> (que também serve de ficha da reserva).</summary>
-internal sealed record ClaimedJob(Guid NotificationId, Guid TenantId, DateTimeOffset LockedUntil);
+internal sealed record ClaimedJob(Guid NotificationId, Guid TenantId, DateTimeOffset LockedUntil, string? TraceParent = null);
 
 /// <summary>
 /// Reserva avisos vencidos de todas as clínicas com o login do despachante (papel <c>notifications_relay</c>),
@@ -30,7 +30,7 @@ internal sealed class JobQueue(RelayDataSource relay)
             FOR UPDATE SKIP LOCKED
         ) AS due
         WHERE j.notification_id = due.notification_id
-        RETURNING j.notification_id, j.tenant_id
+        RETURNING j.notification_id, j.tenant_id, j.trace_parent
         """;
 
     public async Task<IReadOnlyList<ClaimedJob>> ClaimAsync(DateTimeOffset now, TimeSpan lease, int batch, CancellationToken cancellationToken)
@@ -58,7 +58,8 @@ internal sealed class JobQueue(RelayDataSource relay)
                 {
                     while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        claimed.Add(new ClaimedJob(reader.GetGuid(0), reader.GetGuid(1), lockedUntil));
+                        claimed.Add(new ClaimedJob(
+                            reader.GetGuid(0), reader.GetGuid(1), lockedUntil, reader.IsDBNull(2) ? null : reader.GetString(2)));
                     }
                 }
 

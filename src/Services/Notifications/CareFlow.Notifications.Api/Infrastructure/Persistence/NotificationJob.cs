@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace CareFlow.Notifications.Api.Infrastructure.Persistence;
 
 /// <summary>
@@ -15,6 +17,18 @@ internal sealed class NotificationJob
 
     public DateTimeOffset? LockedUntil { get; set; }
 
+    /// <summary>
+    /// Contexto W3C de quem agendou o aviso (o consumo do evento da agenda), para o envio continuar o mesmo
+    /// trace. Só identificadores de trace, nenhum dado do aviso.
+    /// </summary>
+    public string? TraceParent { get; set; }
+
     public static NotificationJob For(Domain.Notifications.Notification notification) =>
-        new() { NotificationId = notification.Id, TenantId = notification.TenantId, DueAt = notification.DueAt };
+        new()
+        {
+            NotificationId = notification.Id,
+            TenantId = notification.TenantId,
+            DueAt = notification.DueAt,
+            TraceParent = Activity.Current?.Id,
+        };
 }

@@ -36,16 +36,20 @@ internal sealed class NotificationsMetrics
         _contactLookups = meter.CreateCounter<long>("careflow.notifications.contact.lookups", "{lookup}", "Leituras de contato no cofre, por resultado.");
         _circuitTransitions = meter.CreateCounter<long>("careflow.notifications.circuit.transitions", "{transition}", "Mudanças de estado do circuit breaker.");
 
-        // 0 = fechado, 1 = meio-aberto, 2 = aberto, 3 = isolado manualmente.
+        // 0 = fechado, 1 = meio-aberto, 2 = aberto, 3 = isolado manualmente. A partição é "shared" ou o índice da
+        // clínica isolada no pool do demo ("isolated-03"), nunca o id da clínica.
         meter.CreateObservableGauge(
             "careflow.notifications.circuit.state",
-            () => circuits.Snapshot().Select(entry =>
-                new Measurement<int>((int)entry.Value, new KeyValuePair<string, object?>("channel", entry.Key.Slug()))),
+            () => circuits.SnapshotAll().Select(entry => new Measurement<int>(
+                (int)entry.State,
+                new KeyValuePair<string, object?>("channel", entry.Channel.Slug()),
+                new KeyValuePair<string, object?>("partition", entry.Partition))),
             "{state}",
             "Estado do circuit breaker de cada canal.");
 
-        circuits.StateChanged += (channel, state) =>
-            _circuitTransitions.Add(1, Tag("channel", channel.Slug()), Tag("state", state.ToString().ToLowerInvariant()));
+        circuits.PartitionStateChanged += (channel, partition, state) =>
+            _circuitTransitions.Add(
+                1, Tag("channel", channel.Slug()), Tag("partition", partition), Tag("state", state.ToString().ToLowerInvariant()));
     }
 
     public void Scheduled(NotificationKind kind) => _scheduled.Add(1, Tag("kind", kind.ToString().ToLowerInvariant()));

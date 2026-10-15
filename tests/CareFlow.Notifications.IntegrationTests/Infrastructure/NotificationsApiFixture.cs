@@ -41,6 +41,9 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
 {
     public static readonly TimeSpan BreakDuration = TimeSpan.FromMilliseconds(800);
 
+    /// <summary>O pool de clínicas isoladas do demo nestes testes; as demais usam o circuito compartilhado.</summary>
+    public static readonly Guid[] IsolatedClinics = [Guid.NewGuid(), Guid.NewGuid()];
+
     private readonly MutableConfiguration _faults = new();
     private PostgresTestServer? _postgres;
     private ApplicationLogin? _login;
@@ -96,6 +99,12 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
             builder.UseSetting("Notifications:Resilience:SamplingDuration", "00:00:30");
             builder.UseSetting("Notifications:Resilience:BreakDuration", BreakDuration.ToString("c"));
             builder.UseSetting("Vault:BaseAddress", "http://patient-vault.test/");
+            builder.UseSetting("FaultInjection:ClinicOverridesEnabled", "true");
+            for (var i = 0; i < IsolatedClinics.Length; i++)
+            {
+                builder.UseSetting($"FaultInjection:IsolatedClinics:{i}", IsolatedClinics[i].ToString());
+            }
+
             builder.UseSetting("ServiceTokens:Local:PrivateKey", Vault.PrivateKeyBase64);
             builder.ConfigureAppConfiguration(configuration => configuration.Add(_faults));
             builder.ConfigureLogging(logging => logging
@@ -205,12 +214,18 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
         // teste e mexeriam no circuit breaker. Cada teste começa com a fila vazia.
         await ExecuteAsAdminAsync("DELETE FROM notification_jobs");
 
+        await ExecuteAsAdminAsync("DELETE FROM clinic_channel_faults");
+
         // Fechar um circuito já fechado não zera as métricas de amostragem do Polly; isolar e fechar zera.
-        foreach (var channel in Enum.GetValues<Channel>())
+        var isolation = Services.GetRequiredService<ClinicIsolation>();
+        foreach (var partition in isolation.IsolatedPartitions.Prepend(ClinicIsolation.Shared))
         {
-            var control = Circuits.ControlFor(channel);
-            await control.IsolateAsync(TestContext.Current.CancellationToken);
-            await control.CloseAsync(TestContext.Current.CancellationToken);
+            foreach (var channel in Enum.GetValues<Channel>())
+            {
+                var control = Circuits.ControlFor(channel, partition);
+                await control.IsolateAsync(TestContext.Current.CancellationToken);
+                await control.CloseAsync(TestContext.Current.CancellationToken);
+            }
         }
     }
 

@@ -10,10 +10,14 @@ using CareFlow.EndToEndTests.Infrastructure;
 using CareFlow.Testing;
 
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
+using OpenTelemetry.Metrics;
 
 using Testcontainers.RabbitMq;
 
@@ -25,7 +29,7 @@ namespace CareFlow.EndToEndTests.Infrastructure;
 /// O sistema inteiro num processo: PostgreSQL e RabbitMQ reais (Testcontainers), um banco por serviço e os
 /// cinco serviços com mensageria ligada, cada um com o login da API e o do despachante, sem superusuário.
 /// Os logs de todos os serviços são capturados para conferir que nenhum carrega dado pessoal.
-/// O Notifications lê o contato no cofre por HTTP (o handler do TestServer do cofre) com token de serviço
+/// O Notifications lê o contato no cofre por HTTP (o cofre roda em Kestrel) com token de serviço
 /// ES256 de verdade, e sobe com o WhatsApp derrubado por falha injetada: o fallback é o caminho normal aqui.
 /// </summary>
 public sealed class CareFlowSystem : IAsyncLifetime
@@ -35,6 +39,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
     private RabbitMqContainer? _rabbit;
 
     public CapturingLoggerProvider Logs { get; } = new();
+
+    /// <summary>Spans, logs e métricas como seriam exportados por OTLP, depois dos filtros de cada serviço.</summary>
+    public TelemetrySink Telemetry { get; } = new();
 
     public ServiceHost Vault { get; private set; } = null!;
 
@@ -57,9 +64,14 @@ public sealed class CareFlowSystem : IAsyncLifetime
         Broker = await BrokerProbe.ConnectAsync(_rabbit, brokerUri);
 
         using var serviceTokenKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        // O cofre roda em Kestrel de verdade: o Notifications chama por HTTP com o SocketsHttpHandler, que é quem
+        // propaga o traceparent e cria o span de cliente, como em produção.
         Vault = await StartAsync<vault::Program>(
             new ServiceSpec("patient-vault", "PatientVault", "careflow_vault", "vault_app", "vault_relay"),
             brokerUri,
+            kestrel: true,
+            configureServices: null,
             ("InternalAuth:PublicKey", Convert.ToBase64String(serviceTokenKey.ExportSubjectPublicKeyInfo())),
             ("KeyManagement:Provider", "Local"),
             ("KeyManagement:Local:ActiveKeyId", "e2e-1"),
@@ -76,14 +88,10 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("Audit:Chain:ActiveKeyId", "e2e-1"),
             ("Audit:Chain:Keys:e2e-1", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))));
 
-        var vaultHandler = Vault.CreateHandler;
         Notifications = await StartAsync<notifications::Program>(
             new ServiceSpec("notifications", "Notifications", "careflow_notifications", "notifications_app", "notifications_relay"),
             brokerUri,
-            services => services
-                .AddHttpClient(notifications::CareFlow.Notifications.Api.Contacts.VaultContactDirectory.ClientName)
-                .ConfigurePrimaryHttpMessageHandler(() => vaultHandler()),
-            ("Vault:BaseAddress", "http://localhost/"),
+            ("Vault:BaseAddress", Vault.BaseAddress!.ToString()),
             ("ServiceTokens:Local:PrivateKey", Convert.ToBase64String(serviceTokenKey.ExportPkcs8PrivateKey())),
             ("Notifications:PollInterval", "00:00:00.200"),
             ("Notifications:RoundRetryDelay", "00:00:00.200"),
@@ -100,11 +108,12 @@ public sealed class CareFlowSystem : IAsyncLifetime
 
     private Task<ServiceHost> StartAsync<TProgram>(ServiceSpec spec, string brokerUri, params (string Key, string Value)[] settings)
         where TProgram : class =>
-        StartAsync<TProgram>(spec, brokerUri, configureServices: null, settings);
+        StartAsync<TProgram>(spec, brokerUri, kestrel: false, configureServices: null, settings);
 
     private async Task<ServiceHost> StartAsync<TProgram>(
         ServiceSpec spec,
         string brokerUri,
+        bool kestrel,
         Action<IServiceCollection>? configureServices,
         params (string Key, string Value)[] settings)
         where TProgram : class
@@ -144,17 +153,28 @@ public sealed class CareFlowSystem : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddTestAuthentication();
+                Telemetry.Attach(services);
                 configureServices?.Invoke(services);
             });
         });
         _factories.Add(factory);
+        if (kestrel)
+        {
+            // Porta livre escolhida pelo sistema, só no loopback.
+            factory.UseKestrel(options => options.Listen(System.Net.IPAddress.Loopback, 0));
+        }
 
         // Sobe o host: aplica as migrations (com o admin do banco) e inicia despachante e consumidor.
-        _ = factory.Server;
-        return new ServiceHost(spec, factory.CreateClient, adminConnectionString, factory.Services)
+        factory.StartServer();
+        Telemetry.Track(factory.Services.GetService<MeterProvider>());
+        Uri? baseAddress = null;
+        if (kestrel)
         {
-            CreateHandler = () => factory.Server.CreateHandler(),
-        };
+            var address = factory.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
+            baseAddress = new Uri(address.Replace("[::]", "localhost", StringComparison.Ordinal).TrimEnd('/') + "/");
+        }
+
+        return new ServiceHost(spec, factory.CreateClient, adminConnectionString, factory.Services) { BaseAddress = baseAddress };
     }
 
     public async ValueTask DisposeAsync()
@@ -203,8 +223,8 @@ public sealed class ServiceHost(ServiceSpec spec, Func<HttpClient> createClient,
 
     public IServiceProvider Services { get; } = services;
 
-    /// <summary>Handler HTTP que entrega direto no TestServer do serviço, para outro serviço chamá-lo.</summary>
-    public required Func<HttpMessageHandler> CreateHandler { get; init; }
+    /// <summary>Endereço real, quando o serviço roda em Kestrel (para outro serviço chamá-lo por HTTP).</summary>
+    public Uri? BaseAddress { get; init; }
 
     public HttpClient Client(Guid tenantId, params string[] scopes)
     {

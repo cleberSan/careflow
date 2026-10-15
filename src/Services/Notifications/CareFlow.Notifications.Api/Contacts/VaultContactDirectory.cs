@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using CareFlow.BuildingBlocks.Diagnostics;
 using CareFlow.Notifications.Api.Common.Observability;
 
 using Polly.CircuitBreaker;
@@ -48,7 +49,7 @@ internal sealed partial class VaultContactDirectory(
             if (!response.IsSuccessStatusCode)
             {
                 // 401/403 indicam configuração errada (chave ou emissor), não paciente ausente: o aviso espera.
-                LogVaultRefused(logger, (int)response.StatusCode, patientRef);
+                LogVaultRefused(logger, (int)response.StatusCode, LogMask.Pseudonym(patientRef));
                 return Outcome(ContactLookup.Unavailable, "refused");
             }
 
@@ -58,7 +59,7 @@ internal sealed partial class VaultContactDirectory(
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException or BrokenCircuitException or JsonException
                                           || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            LogVaultUnavailable(logger, exception.GetType().Name, patientRef);
+            LogVaultUnavailable(logger, exception.GetType().Name, LogMask.Pseudonym(patientRef));
             return Outcome(ContactLookup.Unavailable, "unavailable");
         }
     }
@@ -70,10 +71,10 @@ internal sealed partial class VaultContactDirectory(
     }
 
     [LoggerMessage(EventId = 5001, Level = LogLevel.Error, Message = "Cofre recusou a leitura de contato do paciente {PatientRef} com status {StatusCode}")]
-    private static partial void LogVaultRefused(ILogger logger, int statusCode, Guid patientRef);
+    private static partial void LogVaultRefused(ILogger logger, int statusCode, string patientRef);
 
     [LoggerMessage(EventId = 5002, Level = LogLevel.Warning, Message = "Cofre indisponível ({Error}) ao ler o contato do paciente {PatientRef}")]
-    private static partial void LogVaultUnavailable(ILogger logger, string error, Guid patientRef);
+    private static partial void LogVaultUnavailable(ILogger logger, string error, string patientRef);
 
     private sealed record VaultContactResponse(string? Email, string? Phone)
     {

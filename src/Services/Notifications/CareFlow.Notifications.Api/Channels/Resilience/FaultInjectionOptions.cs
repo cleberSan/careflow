@@ -50,6 +50,17 @@ internal sealed class FaultInjectionOptions
     /// <summary>Por canal, pelo nome em minúsculas: <c>whatsapp</c>, <c>sms</c>, <c>email</c>.</summary>
     public Dictionary<string, ChannelFaultOptions> Channels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Clínicas isoladas (o pool do demo, ADR-0010): cada uma tem circuit breaker próprio por canal e pode ligar
+    /// falhas só para si pela API. As demais compartilham um circuito por canal. Lista fixa e curta, para a memória
+    /// dos pipelines ser limitada.
+    /// </summary>
+    [MaxLength(64)]
+    public List<Guid> IsolatedClinics { get; set; } = [];
+
+    /// <summary>Libera a API de falhas por clínica (só para as clínicas isoladas). Recusada em produção.</summary>
+    public bool ClinicOverridesEnabled { get; set; }
+
     public ChannelFaultOptions? For(Channel channel) =>
         Enabled && Channels.TryGetValue(channel.Slug(), out var fault) && fault.Mode != FaultMode.None ? fault : null;
 

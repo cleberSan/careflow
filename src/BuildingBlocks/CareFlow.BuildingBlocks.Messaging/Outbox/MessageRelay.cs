@@ -53,6 +53,7 @@ public sealed partial class MessageRelay(
     private IChannel? _channel;
     private int _consecutiveFailures;
     private DateTimeOffset _nextCleanup;
+    private DateTimeOffset _nextBacklogReading;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -79,6 +80,8 @@ public sealed partial class MessageRelay(
                     {
                         _consecutiveFailures = 0;
                     }
+
+                    await MeasureBacklogIfDueAsync(stoppingToken).ConfigureAwait(false);
                 }
 
                 await CleanupIfDueAsync(stoppingToken).ConfigureAwait(false);
@@ -200,7 +203,9 @@ public sealed partial class MessageRelay(
         using var activity = MessagingDiagnostics.ActivitySource.StartActivity(
             $"publish {message.Type}", ActivityKind.Producer, parent);
         activity?.SetTag("messaging.system", "rabbitmq");
+        activity?.SetTag("messaging.operation.type", "send");
         activity?.SetTag("messaging.destination.name", MessagingTopology.EventsExchange);
+        activity?.SetTag("messaging.rabbitmq.destination.routing_key", message.Type);
         activity?.SetTag("messaging.message.id", message.Id.ToString());
 
         var channel = await GetChannelAsync(token).ConfigureAwait(false);
@@ -215,6 +220,7 @@ public sealed partial class MessageRelay(
             {
                 [MessageHeaders.TenantId] = message.TenantId.ToString(),
                 [MessageHeaders.TraceParent] = activity?.Id ?? message.TraceParent,
+                [MessageHeaders.OccurredAt] = message.OccurredAt.ToUnixTimeMilliseconds(),
             },
         };
 
@@ -260,6 +266,30 @@ public sealed partial class MessageRelay(
                 // Canal já quebrado; descartar é tudo o que dá para fazer.
                 LogChannelDisposeFailed(logger, ex.GetType().Name);
             }
+        }
+    }
+
+    /// <summary>Quantos eventos esperam no Outbox e há quanto tempo o mais antigo espera (índice parcial dos pendentes).</summary>
+    private async Task MeasureBacklogIfDueAsync(CancellationToken cancellationToken)
+    {
+        var now = time.GetUtcNow();
+        if (now < _nextBacklogReading)
+        {
+            return;
+        }
+
+        _nextBacklogReading = now + options.Value.MetricsInterval;
+        var connection = await relayDataSource.DataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            await using var command = new NpgsqlCommand(
+                $"SELECT count(*), min(occurred_at) FROM {MessagingModelBuilderExtensions.OutboxTable} WHERE dispatched_at IS NULL",
+                connection);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var pending = reader.GetInt64(0);
+            var oldest = reader.IsDBNull(1) ? now : reader.GetFieldValue<DateTimeOffset>(1);
+            diagnostics.OutboxBacklog(pending, now - oldest);
         }
     }
 

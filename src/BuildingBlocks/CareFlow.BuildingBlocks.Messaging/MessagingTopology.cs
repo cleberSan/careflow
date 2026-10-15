@@ -23,5 +23,8 @@ public static class MessageHeaders
 {
     public const string TenantId = "careflow-tenant-id";
     public const string TraceParent = "traceparent";
+
+    /// <summary>Quando o evento aconteceu, em milissegundos Unix: mede o atraso de propagação até cada consumidor.</summary>
+    public const string OccurredAt = "careflow-occurred-at";
     public const string DeliveryCount = "x-delivery-count";
 }

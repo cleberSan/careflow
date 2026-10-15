@@ -23,11 +23,50 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     public SyntheticPatient LastPatient { get; private set; } = null!;
 
+    /// <summary>Cabeçalhos extras em toda chamada (por exemplo, <c>traceparent</c> ou um <c>baggage</c> hostil).</summary>
+    public Dictionary<string, string> ExtraHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Lê os dados pessoais no cofre (vault.read).</summary>
+    public async Task ReadPatientAsync(Guid patientRef)
+    {
+        var response = await Client(system.Vault, "vault.read").GetAsync($"/v1/patients/{patientRef}", Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>Busca o pseudônimo pelo CPF (POST, para o CPF não ir na URL).</summary>
+    public async Task<HttpStatusCode> LookupAsync(string cpf)
+    {
+        var response = await Client(system.Vault, "vault.read").PostAsJsonAsync("/v1/patients/lookup", new { Cpf = cpf }, Json, Ct);
+        return response.StatusCode;
+    }
+
+    /// <summary>Tenta cadastrar de novo o último paciente (mesmo CPF): o cofre recusa.</summary>
+    public async Task<HttpStatusCode> RegisterDuplicateAsync()
+    {
+        var response = await Client(system.Vault, "vault.write").PostAsJsonAsync(
+            "/v1/patients",
+            new { LastPatient.FullName, LastPatient.Cpf, BirthDate = new DateOnly(1990, 5, 17), LastPatient.Email, LastPatient.Phone },
+            Json,
+            Ct);
+        return response.StatusCode;
+    }
+
+    private HttpClient Client(ServiceHost host, params string[] scopes)
+    {
+        var client = host.Client(Clinic, scopes);
+        foreach (var (name, value) in ExtraHeaders)
+        {
+            client.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
+        }
+
+        return client;
+    }
+
     /// <summary>Cadastra um paciente sintético no cofre e devolve o pseudônimo.</summary>
     public async Task<Guid> RegisterPatientAsync()
     {
         LastPatient = new SyntheticPatient(SyntheticPatients.FullName(), SyntheticPatients.Cpf(), SyntheticPatients.Email(), SyntheticPatients.Phone());
-        var response = await system.Vault.Client(Clinic, "vault.write").PostAsJsonAsync(
+        var response = await Client(system.Vault, "vault.write").PostAsJsonAsync(
             "/v1/patients",
             new { LastPatient.FullName, LastPatient.Cpf, BirthDate = new DateOnly(1990, 5, 17), LastPatient.Email, LastPatient.Phone },
             Json,
@@ -39,7 +78,7 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     public async Task GrantAsync(Guid patientRef, string purpose = "scheduling")
     {
-        var response = await system.Consent.Client(Clinic, "consent.write").PutAsJsonAsync(
+        var response = await Client(system.Consent, "consent.write").PutAsJsonAsync(
             $"/v1/patients/{patientRef}/consents/{purpose}",
             new { LegalBasis = "specific-consent", TermVersion = "2026-10" },
             Json,
@@ -49,7 +88,7 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     public async Task RevokeAsync(Guid patientRef, string purpose = "scheduling")
     {
-        var response = await system.Consent.Client(Clinic, "consent.write")
+        var response = await Client(system.Consent, "consent.write")
             .PostAsync($"/v1/patients/{patientRef}/consents/{purpose}/revoke", null, Ct);
         Assert.True(response.IsSuccessStatusCode, $"Revogação falhou: {response.StatusCode}");
     }
@@ -63,7 +102,7 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
                 options: Json),
         };
         request.Headers.Add("Idempotency-Key", idempotencyKey ?? Guid.NewGuid().ToString("N"));
-        var response = await system.Scheduling.Client(Clinic, "scheduling.write").SendAsync(request, Ct);
+        var response = await Client(system.Scheduling, "scheduling.write").SendAsync(request, Ct);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         return new BookingAttempt(
             response.StatusCode,
@@ -87,21 +126,21 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     public async Task<AppointmentView> AppointmentAsync(Guid id)
     {
-        var response = await system.Scheduling.Client(Clinic, "scheduling.read").GetAsync($"/v1/appointments/{id}", Ct);
+        var response = await Client(system.Scheduling, "scheduling.read").GetAsync($"/v1/appointments/{id}", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<AppointmentView>(Json, Ct))!;
     }
 
     public async Task CancelAsync(Guid appointmentId)
     {
-        var response = await system.Scheduling.Client(Clinic, "scheduling.write").PostAsync($"/v1/appointments/{appointmentId}/cancel", null, Ct);
+        var response = await Client(system.Scheduling, "scheduling.write").PostAsync($"/v1/appointments/{appointmentId}/cancel", null, Ct);
         Assert.True(response.IsSuccessStatusCode, $"Cancelamento falhou: {response.StatusCode}");
     }
 
     /// <summary>Avisos da consulta no Notifications (vazio enquanto o evento não chegou).</summary>
     public async Task<NotificationView[]> NotificationsAsync(Guid appointmentId)
     {
-        var response = await system.Notifications.Client(Clinic, "notifications.read").GetAsync($"/v1/appointments/{appointmentId}/notifications", Ct);
+        var response = await Client(system.Notifications, "notifications.read").GetAsync($"/v1/appointments/{appointmentId}/notifications", Ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return [];
@@ -113,14 +152,14 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     public async Task<AuditEntryView[]> AuditTrailAsync(Guid resourceId)
     {
-        var response = await system.Audit.Client(Clinic, "audit.read").GetAsync($"/v1/audit/entries?resourceId={resourceId}&limit=200", Ct);
+        var response = await Client(system.Audit, "audit.read").GetAsync($"/v1/audit/entries?resourceId={resourceId}&limit=200", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<AuditPageView>(Json, Ct))!.Items;
     }
 
     public async Task<ChainVerificationView> VerifyChainAsync()
     {
-        var response = await system.Audit.Client(Clinic, "audit.read").GetAsync("/v1/audit/verification", Ct);
+        var response = await Client(system.Audit, "audit.read").GetAsync("/v1/audit/verification", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<ChainVerificationView>(Json, Ct))!;
     }

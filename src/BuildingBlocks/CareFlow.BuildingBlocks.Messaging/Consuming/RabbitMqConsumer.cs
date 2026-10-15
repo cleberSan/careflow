@@ -42,8 +42,9 @@ public sealed partial class RabbitMqConsumer<TContext>(
                 await StartConsumingAsync(settings, stoppingToken).ConfigureAwait(false);
                 failures = 0;
 
-                // Daqui em diante o cliente recupera conexão, canal e consumidor sozinho se o broker cair.
-                await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+                // Daqui em diante o cliente recupera conexão, canal e consumidor sozinho se o broker cair;
+                // este laço só mede as filas para as métricas.
+                await MeasureQueuesAsync(settings, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -91,6 +92,40 @@ public sealed partial class RabbitMqConsumer<TContext>(
         LogConsuming(logger, queue, registry.EventTypes.Count);
     }
 
+    private async Task MeasureQueuesAsync(MessagingOptions settings, CancellationToken stoppingToken)
+    {
+        string[] queues = [MessagingTopology.QueueFor(settings.ServiceName), MessagingTopology.DeadLetterQueueFor(settings.ServiceName)];
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var connection = await broker.GetAsync(stoppingToken).ConfigureAwait(false);
+
+                // Canal próprio e curto: uma declaração passiva que falha fecha o canal, e não pode ser o do consumidor.
+                var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken).ConfigureAwait(false);
+                await using (channel.ConfigureAwait(false))
+                {
+                    foreach (var queue in queues)
+                    {
+                        var declared = await channel.QueueDeclarePassiveAsync(queue, stoppingToken).ConfigureAwait(false);
+                        diagnostics.QueueDepth(queue, declared.MessageCount);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Broker fora: a medida fica com o último valor e volta quando ele voltar.
+                LogQueueMeasurementFailed(logger, ex);
+            }
+
+            await Task.Delay(settings.MetricsInterval, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
     private async Task OnReceivedAsync(IChannel channel, BasicDeliverEventArgs delivery)
     {
         var cancellationToken = delivery.CancellationToken;
@@ -108,6 +143,10 @@ public sealed partial class RabbitMqConsumer<TContext>(
         using var activity = MessagingDiagnostics.ActivitySource.StartActivity(
             $"process {context.EventType}", ActivityKind.Consumer, parent);
         activity?.SetTag("messaging.system", "rabbitmq");
+        activity?.SetTag("messaging.operation.type", "process");
+        activity?.SetTag("messaging.destination.name", MessagingTopology.QueueFor(options.Value.ServiceName));
+        activity?.SetTag("messaging.consumer.group.name", options.Value.ServiceName);
+        activity?.SetTag("messaging.rabbitmq.destination.routing_key", context.EventType);
         activity?.SetTag("messaging.message.id", context.MessageId.ToString());
 
         try
@@ -117,13 +156,22 @@ public sealed partial class RabbitMqConsumer<TContext>(
             {
                 case ProcessOutcome.Processed:
                     diagnostics.Consumed(context.EventType);
+                    if (ReadOccurredAt(properties) is { } occurredAt)
+                    {
+                        diagnostics.DeliveryLag(context.EventType, options.Value.ServiceName, DateTimeOffset.UtcNow - occurredAt);
+                    }
+
+                    activity?.SetTag("careflow.inbox.outcome", "processed");
                     break;
                 case ProcessOutcome.Duplicate:
                     diagnostics.Duplicate(context.EventType);
+                    activity?.SetTag("careflow.inbox.outcome", "duplicate");
                     LogDuplicate(logger, context.EventType, context.MessageId);
                     break;
                 default:
                     diagnostics.Rejected();
+                    activity?.SetTag("careflow.inbox.outcome", "dead-lettered");
+                    activity?.SetStatus(ActivityStatusCode.Error, "invalid-payload");
                     LogInvalidPayload(logger, context.EventType, context.MessageId);
                     await channel.BasicRejectAsync(delivery.DeliveryTag, requeue: false, cancellationToken).ConfigureAwait(false);
                     return;
@@ -173,6 +221,16 @@ public sealed partial class RabbitMqConsumer<TContext>(
             }
             : null;
 
+    private static DateTimeOffset? ReadOccurredAt(IReadOnlyBasicProperties properties) =>
+        properties.Headers is not null && properties.Headers.TryGetValue(MessageHeaders.OccurredAt, out var value)
+            ? value switch
+            {
+                long ms => DateTimeOffset.FromUnixTimeMilliseconds(ms),
+                int ms => DateTimeOffset.FromUnixTimeMilliseconds(ms),
+                _ => null,
+            }
+            : null;
+
     private static long ReadDeliveryCount(IReadOnlyBasicProperties properties) =>
         properties.Headers is not null && properties.Headers.TryGetValue(MessageHeaders.DeliveryCount, out var value)
             ? value switch
@@ -216,6 +274,9 @@ public sealed partial class RabbitMqConsumer<TContext>(
     private static partial void LogDuplicate(ILogger logger, string eventType, Guid messageId);
 
     // A exceção vai junto para o diagnóstico; handlers não colocam dados pessoais em mensagens de exceção.
+    [LoggerMessage(EventId = 9207, Level = LogLevel.Debug, Message = "Medição das filas falhou; nova tentativa no próximo intervalo")]
+    private static partial void LogQueueMeasurementFailed(ILogger logger, Exception exception);
+
     [LoggerMessage(EventId = 9206, Level = LogLevel.Warning, Message = "Falha ao processar {EventType} {MessageId} (entrega {Delivery}): {ErrorType}")]
     private static partial void LogProcessingFailed(ILogger logger, string eventType, Guid messageId, long delivery, string errorType, Exception exception);
 }

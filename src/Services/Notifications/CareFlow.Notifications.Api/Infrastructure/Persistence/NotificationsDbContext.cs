@@ -24,6 +24,8 @@ internal sealed class NotificationsDbContext(DbContextOptions<NotificationsDbCon
 
     public DbSet<ClinicSettings> ClinicSettings => Set<ClinicSettings>();
 
+    public DbSet<ClinicChannelFault> ChannelFaults => Set<ClinicChannelFault>();
+
     // Avaliado a cada consulta. O RLS no banco repete a mesma regra: duas camadas independentes.
     private Guid CurrentTenantId => tenant.TenantId;
 
@@ -36,6 +38,7 @@ internal sealed class NotificationsDbContext(DbContextOptions<NotificationsDbCon
         modelBuilder.Entity<AppointmentTrack>().HasQueryFilter(a => a.TenantId == CurrentTenantId);
         modelBuilder.Entity<NotificationConsent>().HasQueryFilter(c => c.TenantId == CurrentTenantId);
         modelBuilder.Entity<ClinicSettings>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        modelBuilder.Entity<ClinicChannelFault>().HasQueryFilter(f => f.TenantId == CurrentTenantId);
         modelBuilder.AddOutbox(() => CurrentTenantId);
         modelBuilder.AddInbox(() => CurrentTenantId);
     }

@@ -47,11 +47,11 @@ public sealed class MigrationTests(NotificationsApiFixture api)
                 .ToListAsync(Ct);
             Assert.Empty(withoutRls);
 
-            // 8 tabelas com tenant_isolation; Outbox, Inbox e fila com relay_access.
+            // 9 tabelas com tenant_isolation (inclui as falhas por clínica da fase 6); Outbox, Inbox e fila com relay_access.
             var policies = await db.Database
                 .SqlQueryRaw<long>("""SELECT count(*) AS "Value" FROM pg_policies WHERE schemaname = 'public'""")
                 .SingleAsync(Ct);
-            Assert.Equal(11, policies);
+            Assert.Equal(12, policies);
         }
         finally
         {
