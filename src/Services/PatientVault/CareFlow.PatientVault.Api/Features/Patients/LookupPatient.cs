@@ -1,4 +1,7 @@
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.BuildingBlocks.Tenancy;
+using CareFlow.PatientVault.Api.Common;
 using CareFlow.PatientVault.Api.Cryptography;
 using CareFlow.PatientVault.Api.Infrastructure.Persistence;
 using CareFlow.PatientVault.Domain.Patients;
@@ -18,6 +21,9 @@ internal static class LookupPatientEndpoint
         LookupPatientRequest request,
         VaultDbContext db,
         TenantKeyRing keys,
+        ITenantContext tenant,
+        TimeProvider time,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var cpf = Cpf.Create(request.Cpf);
@@ -40,8 +46,15 @@ internal static class LookupPatientEndpoint
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return patientRef is null
-            ? PatientErrors.NotFound.ToProblem()
-            : TypedResults.Ok(new PatientRefResponse(patientRef.Value));
+        if (patientRef is null)
+        {
+            return PatientErrors.NotFound.ToProblem();
+        }
+
+        // Localizar alguém pelo CPF também é acesso ao dado: fica na trilha.
+        db.Record(tenant.TenantId, patientRef.Value, AuditActor.From(httpContext.User), VaultAudit.LookedUp, time.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return TypedResults.Ok(new PatientRefResponse(patientRef.Value));
     }
 }

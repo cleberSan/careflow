@@ -1,4 +1,6 @@
 using CareFlow.BuildingBlocks.AspNetCore.Http;
+using CareFlow.BuildingBlocks.AspNetCore.Security;
+using CareFlow.PatientVault.Api.Common;
 using CareFlow.PatientVault.Api.Common.Http;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Cryptography;
@@ -17,6 +19,7 @@ internal static class GetPatientEndpoint
         VaultDbContext db,
         TenantKeyRing keys,
         VaultMetrics metrics,
+        TimeProvider time,
         HttpResponse response,
         CancellationToken cancellationToken)
     {
@@ -32,6 +35,11 @@ internal static class GetPatientEndpoint
 
         var key = await keys.GetAsync(record.KeyVersion, cancellationToken).ConfigureAwait(false);
         var patient = PatientProtector.Unprotect(record, key);
+
+        // Revelar dados pessoais é o acesso que mais importa na trilha. Se o registro falhar, a resposta
+        // também falha: nenhum dado sai do cofre sem auditoria.
+        db.Record(record.TenantId, record.PatientRef, AuditActor.From(response.HttpContext.User), VaultAudit.Read, time.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         metrics.Disclosed();
         response.Headers.ETag = EntityTag.Format(record.RowVersion);

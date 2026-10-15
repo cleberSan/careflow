@@ -196,12 +196,9 @@ public sealed class PatientProjectionTests(SchedulingApiFixture api)
         await RevokeAsync(2);
 
         // Assert
-        var cancellations = (await api.OutboxAsync(_tenant))
-            .Where(row => row.Type == "audit.data-access" && row.Payload.Contains(ConsentRevokedConsumer.CancelAction, StringComparison.Ordinal))
-            .ToList();
-        var entry = Assert.Single(cancellations);
-        Assert.Contains("\"actor\": \"careflow-scheduling\"", entry.Payload, StringComparison.Ordinal);
-        Assert.Contains(_patient.ToString(), entry.Payload, StringComparison.Ordinal);
+        var entry = Assert.Single(await api.OutboxAsync(_tenant), row => row.AuditAction == ConsentRevokedConsumer.CancelAction);
+        Assert.Equal("careflow-scheduling", entry.Payload.GetProperty("actor").GetString());
+        Assert.Equal(_patient, entry.Payload.GetProperty("resourceId").GetGuid());
     }
 
     [Fact]

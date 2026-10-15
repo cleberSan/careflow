@@ -14,10 +14,8 @@ public sealed class AccessAuditTests(SchedulingApiFixture api)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private async Task<string[]> AuditedActionsAsync(Guid tenant) =>
-        [.. (await api.OutboxAsync(tenant))
-            .Where(row => row.Type == "audit.data-access")
-            .Select(row => System.Text.Json.JsonDocument.Parse(row.Payload).RootElement.GetProperty("action").GetString()!)];
+    private async Task<string?[]> AuditedActionsAsync(Guid tenant) =>
+        [.. (await api.OutboxAsync(tenant)).Where(row => row.AuditAction is not null).Select(row => row.AuditAction)];
 
     [Fact]
     public async Task BookReadCancel_EachRecordsAnAuditEvent()
@@ -46,12 +44,11 @@ public sealed class AccessAuditTests(SchedulingApiFixture api)
         await client.BookAsync(request, NewKey(), Ct);
 
         // Assert
-        var (_, payload) = Assert.Single(await api.OutboxAsync(_tenant));
-        using var document = System.Text.Json.JsonDocument.Parse(payload);
-        Assert.Equal("scheduling", document.RootElement.GetProperty("sourceService").GetString());
-        Assert.Equal("patient", document.RootElement.GetProperty("resourceType").GetString());
-        Assert.Equal(request.PatientRef, document.RootElement.GetProperty("resourceId").GetGuid());
-        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("actor").GetString()));
+        var payload = Assert.Single(await api.OutboxAsync(_tenant)).Payload;
+        Assert.Equal("scheduling", payload.GetProperty("sourceService").GetString());
+        Assert.Equal("patient", payload.GetProperty("resourceType").GetString());
+        Assert.Equal(request.PatientRef, payload.GetProperty("resourceId").GetGuid());
+        Assert.False(string.IsNullOrWhiteSpace(payload.GetProperty("actor").GetString()));
     }
 
     [Fact]

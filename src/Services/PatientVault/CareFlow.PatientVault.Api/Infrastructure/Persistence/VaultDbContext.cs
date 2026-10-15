@@ -1,3 +1,4 @@
+using CareFlow.BuildingBlocks.Messaging.Persistence;
 using CareFlow.BuildingBlocks.Tenancy;
 
 using Microsoft.EntityFrameworkCore;
@@ -20,5 +21,6 @@ internal sealed class VaultDbContext(DbContextOptions<VaultDbContext> options, I
         modelBuilder.ApplyConfiguration(new TenantKeyRecordConfiguration());
         modelBuilder.Entity<PatientRecord>().HasQueryFilter(patient => patient.TenantId == CurrentTenantId);
         modelBuilder.Entity<TenantKeyRecord>().HasQueryFilter(key => key.TenantId == CurrentTenantId);
+        modelBuilder.AddOutbox(() => CurrentTenantId);
     }
 }

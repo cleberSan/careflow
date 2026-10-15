@@ -124,27 +124,9 @@ public sealed class SchedulingApiFixture : IAsyncLifetime
         await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>Tipos de evento no Outbox da clínica, em ordem de criação (lido como admin).</summary>
-    public async Task<IReadOnlyList<(string Type, string Payload)>> OutboxAsync(Guid tenantId)
-    {
-        await using var connection = new NpgsqlConnection(AdminConnectionString);
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using var command = new NpgsqlCommand(
-            "SELECT type, payload::text FROM outbox_messages WHERE tenant_id = $1 ORDER BY id",
-            connection)
-        {
-            Parameters = { new() { Value = tenantId } },
-        };
-
-        var rows = new List<(string, string)>();
-        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
-        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
-        {
-            rows.Add((reader.GetString(0), reader.GetString(1)));
-        }
-
-        return rows;
-    }
+    /// <summary>Eventos no Outbox da clínica, em ordem de criação (lido como admin).</summary>
+    public Task<IReadOnlyList<OutboxRow>> OutboxAsync(Guid tenantId) =>
+        OutboxRows.ReadAsync(AdminConnectionString, tenantId, TestContext.Current.CancellationToken);
 
     private static HttpClient Configure(HttpClient client, Guid? tenantId, string[] scopes)
     {
