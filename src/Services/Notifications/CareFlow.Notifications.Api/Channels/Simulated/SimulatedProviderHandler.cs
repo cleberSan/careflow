@@ -75,7 +75,7 @@ internal sealed class SimulatedProviderHandler(
         var (message, created) = ledger.Accept(channel, key, body.To, body.Text, time.GetUtcNow());
 
         // Resposta perdida depois do aceite: só na primeira vez, para a retentativa receber o replay.
-        var fault = faults.CurrentValue.For(channel);
+        var fault = ChannelCall.Of(request) is { } call ? call.Fault : faults.CurrentValue.For(channel);
         if (created && fault?.Mode == FaultMode.LostResponse && Roll(fault.InjectionRate))
         {
             throw new HttpRequestException("A resposta do provedor simulado se perdeu depois do aceite.");

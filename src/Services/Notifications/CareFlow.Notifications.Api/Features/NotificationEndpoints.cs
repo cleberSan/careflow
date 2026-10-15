@@ -1,4 +1,6 @@
+using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Api.Common.Security;
+using CareFlow.Notifications.Api.Features.FaultInjection;
 using CareFlow.Notifications.Api.Features.Notifications;
 using CareFlow.Notifications.Api.Features.Settings;
 
@@ -23,6 +25,12 @@ internal static class NotificationEndpoints
             .RequireAuthorization(AuthorizationPolicies.Admin)
             .WithName("PutClinicSettings")
             .WithSummary("Grava ordem dos canais, nome nas mensagens, fuso e antecedência do lembrete.");
+
+        // Só no ambiente de demonstração: fora dele, as rotas nem existem.
+        if (app.ServiceProvider.GetRequiredService<ClinicIsolation>().OverridesEnabled)
+        {
+            app.MapFaultInjectionEndpoints(AuthorizationPolicies.Admin);
+        }
 
         return app;
     }

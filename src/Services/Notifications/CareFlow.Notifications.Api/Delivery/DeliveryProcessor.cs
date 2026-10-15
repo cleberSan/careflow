@@ -1,12 +1,15 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 
 using CareFlow.Notifications.Api.Channels;
+using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Api.Common;
 using CareFlow.Notifications.Api.Common.Observability;
 using CareFlow.Notifications.Api.Contacts;
 using CareFlow.Notifications.Api.Features;
 using CareFlow.Notifications.Api.Infrastructure;
 using CareFlow.Notifications.Api.Infrastructure.Persistence;
+using CareFlow.Notifications.Domain.Channels;
 using CareFlow.Notifications.Domain.Messages;
 using CareFlow.Notifications.Domain.Notifications;
 
@@ -33,6 +36,7 @@ internal sealed partial class DeliveryProcessor(
     NotificationsDbContext db,
     IContactDirectory contacts,
     ChannelRouter router,
+    ClinicFaultResolver faults,
     NotificationsMetrics metrics,
     TimeProvider time,
     IOptions<NotificationOptions> options,
@@ -44,6 +48,7 @@ internal sealed partial class DeliveryProcessor(
         var settings = options.Value;
 
         var notification = await db.Notifications.FirstOrDefaultAsync(n => n.Id == job.NotificationId, cancellationToken).ConfigureAwait(false);
+        Activity.Current?.SetTag("careflow.notification.kind", notification?.Kind.ToString().ToLowerInvariant());
         if (notification is null)
         {
             await ReleaseAsync(job, reschedule: null, cancellationToken).ConfigureAwait(false);
@@ -98,7 +103,8 @@ internal sealed partial class DeliveryProcessor(
         {
             var clinic = await ProjectionStore.ClinicSettingsAsync(db, notification.TenantId, settings.DefaultClinicName, cancellationToken).ConfigureAwait(false);
             var text = MessageComposer.Compose(notification, clinic);
-            routing = await router.SendAsync(notification, lookup.Contact!, text, clinic.ChannelOrder, round, cancellationToken).ConfigureAwait(false);
+            var plan = await faults.PlanAsync(notification.TenantId, cancellationToken).ConfigureAwait(false);
+            routing = await router.SendAsync(notification, lookup.Contact!, text, clinic.ChannelOrder, round, plan, cancellationToken).ConfigureAwait(false);
         }
 
         return await RecordAsync(job, notification.Id, routing, cancellationToken).ConfigureAwait(false);
@@ -118,6 +124,7 @@ internal sealed partial class DeliveryProcessor(
             DateTimeOffset? reschedule = null;
             if (routing.Delivered)
             {
+                Activity.Current?.SetTag("careflow.notification.delivered_via", routing.DeliveredVia!.Value.Slug());
                 notification.MarkSent(routing.DeliveredVia!.Value, routing.ProviderMessageId!, now);
                 db.Record(notification, NotificationsAudit.SentAction(notification.Kind, routing.DeliveredVia.Value), now);
                 outcome = ProcessingOutcome.Sent;

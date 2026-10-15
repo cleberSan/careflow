@@ -1,3 +1,6 @@
+using System.Diagnostics;
+
+using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Api.Common.Observability;
 using CareFlow.Notifications.Api.Contacts;
 using CareFlow.Notifications.Domain.Channels;
@@ -16,12 +19,23 @@ internal sealed record RoutingResult(IReadOnlyList<DeliveryAttempt> Attempts, Ch
 /// </summary>
 internal sealed class ChannelRouter(ChannelGateway gateway, NotificationsMetrics metrics, TimeProvider time)
 {
+    public Task<RoutingResult> SendAsync(
+        Notification notification,
+        PatientContact contact,
+        string text,
+        ChannelOrder order,
+        int round,
+        CancellationToken cancellationToken) =>
+        SendAsync(notification, contact, text, order, round, plan: null, cancellationToken);
+
+    /// <inheritdoc cref="SendAsync(Notification, PatientContact, string, ChannelOrder, int, CancellationToken)"/>
     public async Task<RoutingResult> SendAsync(
         Notification notification,
         PatientContact contact,
         string text,
         ChannelOrder order,
         int round,
+        ClinicChannelPlan? plan,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(notification);
@@ -42,9 +56,13 @@ internal sealed class ChannelRouter(ChannelGateway gateway, NotificationsMetrics
             if (failed is not null)
             {
                 metrics.Fallback(failed.Value, channel);
+                Activity.Current?.AddEvent(new ActivityEvent(
+                    "fallback",
+                    tags: new ActivityTagsCollection { ["from"] = failed.Value.Slug(), ["to"] = channel.Slug() }));
             }
 
-            var result = await gateway.SendAsync(channel, notification.IdempotencyKeyFor(channel), address, text, cancellationToken).ConfigureAwait(false);
+            var result = await gateway.SendAsync(
+                channel, notification.IdempotencyKeyFor(channel), address, text, plan?.CallFor(channel), cancellationToken).ConfigureAwait(false);
             if (result.Kind == ChannelResultKind.Delivered)
             {
                 attempts.Add(DeliveryAttempt.Record(notification, round, channel, AttemptOutcome.Delivered, error: null, time.GetUtcNow()));

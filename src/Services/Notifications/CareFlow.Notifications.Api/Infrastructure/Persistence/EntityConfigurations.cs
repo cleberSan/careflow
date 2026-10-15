@@ -84,6 +84,9 @@ internal sealed class NotificationJobConfiguration : IEntityTypeConfiguration<No
 {
     public const string TableName = "notification_jobs";
 
+    /// <summary>traceparent W3C tem 55 caracteres; folga para versões futuras do formato.</summary>
+    public const int MaxTraceParentLength = 128;
+
     public void Configure(EntityTypeBuilder<NotificationJob> builder)
     {
         builder.ToTable(TableName);
@@ -92,12 +95,30 @@ internal sealed class NotificationJobConfiguration : IEntityTypeConfiguration<No
         builder.Property(j => j.TenantId).HasColumnName("tenant_id");
         builder.Property(j => j.DueAt).HasColumnName("due_at");
         builder.Property(j => j.LockedUntil).HasColumnName("locked_until");
+        builder.Property(j => j.TraceParent).HasColumnName("trace_parent").HasMaxLength(MaxTraceParentLength);
 
         builder.HasOne<Notification>().WithOne().HasForeignKey<NotificationJob>(j => j.NotificationId)
             .HasConstraintName("fk_notification_jobs_notifications").OnDelete(DeleteBehavior.Cascade);
 
         // O despachante busca por horário; a fila só tem pendentes, então o índice não cresce com o histórico.
         builder.HasIndex(j => j.DueAt).HasDatabaseName("ix_notification_jobs_due_at");
+    }
+}
+
+internal sealed class ClinicChannelFaultConfiguration : IEntityTypeConfiguration<ClinicChannelFault>
+{
+    public const string TableName = "clinic_channel_faults";
+
+    public void Configure(EntityTypeBuilder<ClinicChannelFault> builder)
+    {
+        builder.ToTable(TableName, table =>
+            table.HasCheckConstraint("ck_clinic_channel_faults_mode", "mode IN ('Latency', 'Error', 'Unavailable', 'LostResponse')"));
+        builder.HasKey(f => new { f.TenantId, f.Channel }).HasName("pk_clinic_channel_faults");
+        builder.Property(f => f.TenantId).HasColumnName("tenant_id");
+        builder.Property(f => f.Channel).HasColumnName("channel").HasConversion<string>().HasMaxLength(16);
+        builder.Property(f => f.Mode).HasColumnName("mode").HasConversion<string>().HasMaxLength(16);
+        builder.Property(f => f.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(f => f.UpdatedAt).HasColumnName("updated_at");
     }
 }
 

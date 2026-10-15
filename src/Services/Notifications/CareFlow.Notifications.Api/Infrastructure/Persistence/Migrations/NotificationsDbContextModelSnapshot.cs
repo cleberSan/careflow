@@ -120,6 +120,40 @@ namespace CareFlow.Notifications.Api.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CareFlow.Notifications.Api.Infrastructure.Persistence.ClinicChannelFault", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("mode");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("TenantId", "Channel")
+                        .HasName("pk_clinic_channel_faults");
+
+                    b.ToTable("clinic_channel_faults", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_clinic_channel_faults_mode", "mode IN ('Latency', 'Error', 'Unavailable', 'LostResponse')");
+                        });
+                });
+
             modelBuilder.Entity("CareFlow.Notifications.Api.Infrastructure.Persistence.NotificationJob", b =>
                 {
                     b.Property<Guid>("NotificationId")
@@ -137,6 +171,11 @@ namespace CareFlow.Notifications.Api.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("TraceParent")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("trace_parent");
 
                     b.HasKey("NotificationId")
                         .HasName("pk_notification_jobs");

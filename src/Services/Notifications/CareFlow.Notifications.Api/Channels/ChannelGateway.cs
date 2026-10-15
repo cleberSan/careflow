@@ -1,7 +1,10 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using CareFlow.Notifications.Api.Channels.Resilience;
+using CareFlow.Notifications.Api.Common.Observability;
 using CareFlow.Notifications.Domain.Channels;
 
 using Polly.CircuitBreaker;
@@ -39,7 +42,35 @@ internal sealed partial class ChannelGateway(IHttpClientFactory clients, ILogger
 
     public static string StatusClientName(Channel channel) => $"channel-{channel.Slug()}-status";
 
-    public async Task<ChannelResult> SendAsync(Channel channel, string idempotencyKey, string recipient, string text, CancellationToken cancellationToken)
+    public Task<ChannelResult> SendAsync(Channel channel, string idempotencyKey, string recipient, string text, CancellationToken cancellationToken) =>
+        SendAsync(channel, idempotencyKey, recipient, text, call: null, cancellationToken);
+
+    /// <summary>
+    /// Envia contando no circuito e com a falha de <paramref name="call"/> (a partição e a falha da clínica do
+    /// aviso). Sem ela, o circuito compartilhado e a falha da configuração geral.
+    /// </summary>
+    public async Task<ChannelResult> SendAsync(
+        Channel channel, string idempotencyKey, string recipient, string text, ChannelCall? call, CancellationToken cancellationToken)
+    {
+        using var activity = NotificationsDiagnostics.StartChannelAttempt(channel.Slug());
+        activity?.SetTag("careflow.circuit.partition", call?.Partition ?? ClinicIsolation.Shared);
+        var result = await SendCoreAsync(channel, idempotencyKey, recipient, text, call, cancellationToken).ConfigureAwait(false);
+        activity?.SetTag("careflow.channel.result", result.Kind switch
+        {
+            ChannelResultKind.Delivered => "delivered",
+            ChannelResultKind.CircuitOpen => "circuit-open",
+            _ => "failed",
+        });
+        if (result.Kind != ChannelResultKind.Delivered)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, result.Error);
+        }
+
+        return result;
+    }
+
+    private async Task<ChannelResult> SendCoreAsync(
+        Channel channel, string idempotencyKey, string recipient, string text, ChannelCall? call, CancellationToken cancellationToken)
     {
         var client = clients.CreateClient(SendClientName(channel));
         using var request = new HttpRequestMessage(HttpMethod.Post, "messages")
@@ -47,6 +78,10 @@ internal sealed partial class ChannelGateway(IHttpClientFactory clients, ILogger
             Content = JsonContent.Create(new ProviderRequest(recipient, text), options: JsonSerializerOptions.Web),
         };
         request.Headers.Add(ProviderRequest.IdempotencyHeader, idempotencyKey);
+        if (call is not null)
+        {
+            request.Options.Set(ChannelCall.Key, call);
+        }
 
         string error;
         try
@@ -79,10 +114,11 @@ internal sealed partial class ChannelGateway(IHttpClientFactory clients, ILogger
 
         // O provedor pode ter aceitado e a resposta se perdido. Antes de cair para outro canal (o que mandaria
         // uma segunda mensagem ao paciente), pergunta ao provedor por esta chave.
-        var confirmed = await LookupAsync(channel, idempotencyKey, cancellationToken).ConfigureAwait(false);
+        var confirmed = await LookupAsync(channel, idempotencyKey, call, cancellationToken).ConfigureAwait(false);
         if (confirmed is not null)
         {
             LogConfirmedAfterFailure(logger, channel, error);
+            Activity.Current?.AddEvent(new ActivityEvent("confirmed-by-idempotency-key"));
             return ChannelResult.Delivered(confirmed.MessageId);
         }
 
@@ -90,13 +126,18 @@ internal sealed partial class ChannelGateway(IHttpClientFactory clients, ILogger
         return ChannelResult.Failed(error);
     }
 
-    private async Task<ProviderResponse?> LookupAsync(Channel channel, string idempotencyKey, CancellationToken cancellationToken)
+    private async Task<ProviderResponse?> LookupAsync(Channel channel, string idempotencyKey, ChannelCall? call, CancellationToken cancellationToken)
     {
         try
         {
             var client = clients.CreateClient(StatusClientName(channel));
-            using var response = await client.GetAsync(new Uri("messages/" + Uri.EscapeDataString(idempotencyKey), UriKind.Relative), cancellationToken)
-                .ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("messages/" + Uri.EscapeDataString(idempotencyKey), UriKind.Relative));
+            if (call is not null)
+            {
+                request.Options.Set(ChannelCall.Key, call);
+            }
+
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             return response.StatusCode == HttpStatusCode.OK ? await ReadAsync(response, cancellationToken).ConfigureAwait(false) : null;
         }
         catch (Exception ex) when (IsTransportFailure(ex) && !cancellationToken.IsCancellationRequested)

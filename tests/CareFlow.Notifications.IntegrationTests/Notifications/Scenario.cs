@@ -8,9 +8,9 @@ using static CareFlow.Notifications.IntegrationTests.Infrastructure.Notification
 namespace CareFlow.Notifications.IntegrationTests.Notifications;
 
 /// <summary>Uma clínica e um paciente sintético com contato e consentimento para notificações.</summary>
-internal sealed class Scenario(NotificationsApiFixture api)
+internal sealed class Scenario(NotificationsApiFixture api, Guid? tenant = null)
 {
-    public Guid Tenant { get; } = Guid.NewGuid();
+    public Guid Tenant { get; } = tenant ?? Guid.NewGuid();
 
     public Guid Patient { get; } = Guid.NewGuid();
 
@@ -18,9 +18,9 @@ internal sealed class Scenario(NotificationsApiFixture api)
 
     public HttpClient Reader => api.CreateClient(Tenant, Read);
 
-    public static async Task<Scenario> ReadyAsync(NotificationsApiFixture api, PatientContact? contact = null)
+    public static async Task<Scenario> ReadyAsync(NotificationsApiFixture api, PatientContact? contact = null, Guid? tenant = null)
     {
-        var scenario = new Scenario(api);
+        var scenario = new Scenario(api, tenant);
         await scenario.WithContactAsync(contact ?? scenario.Contact);
         await api.GrantNotificationsAsync(scenario.Tenant, scenario.Patient);
         return scenario;

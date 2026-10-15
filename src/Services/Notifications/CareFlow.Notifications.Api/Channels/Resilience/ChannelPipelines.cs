@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 
 using CareFlow.Notifications.Domain.Channels;
@@ -25,6 +26,7 @@ internal static class ChannelPipelines
         Channel channel,
         ChannelResilienceOptions options,
         ChannelCircuits circuits,
+        string partition,
         Func<FaultInjectionOptions> faults)
     {
         builder
@@ -42,11 +44,11 @@ internal static class ChannelPipelines
                 MinimumThroughput = options.MinimumThroughput,
                 SamplingDuration = options.SamplingDuration,
                 BreakDuration = options.BreakDuration,
-                StateProvider = circuits.ProviderFor(channel),
-                ManualControl = circuits.ControlFor(channel),
-                OnOpened = _ => Report(circuits, channel, ChannelCircuitState.Open),
-                OnHalfOpened = _ => Report(circuits, channel, ChannelCircuitState.HalfOpen),
-                OnClosed = _ => Report(circuits, channel, ChannelCircuitState.Closed),
+                StateProvider = circuits.ProviderFor(channel, partition),
+                ManualControl = circuits.ControlFor(channel, partition),
+                OnOpened = _ => Report(circuits, channel, partition, ChannelCircuitState.Open),
+                OnHalfOpened = _ => Report(circuits, channel, partition, ChannelCircuitState.HalfOpen),
+                OnClosed = _ => Report(circuits, channel, partition, ChannelCircuitState.Closed),
             })
             .AddTimeout(options.AttemptTimeout);
 
@@ -69,32 +71,41 @@ internal static class ChannelPipelines
 
     private static void AddFaults(ResiliencePipelineBuilder<HttpResponseMessage> builder, Channel channel, Func<FaultInjectionOptions> faults)
     {
+        // A falha vem da chamada (resolvida pelo gateway para a clínica do aviso) ou, sem ela, da configuração geral.
+        ChannelFaultOptions? Resolve(ResilienceContext context) =>
+            ChannelCall.Of(context.GetRequestMessage()) is { } call ? call.Fault : faults().For(channel);
+        bool Active(ResilienceContext context, FaultMode mode) => Resolve(context)?.Mode == mode;
+        double Rate(ResilienceContext context) => Resolve(context)?.InjectionRate ?? 0;
+
         builder
             .AddChaosLatency(new ChaosLatencyStrategyOptions
             {
-                EnabledGenerator = _ => ValueTask.FromResult(faults().IsActive(channel, FaultMode.Latency)),
-                InjectionRateGenerator = _ => ValueTask.FromResult(faults().For(channel)?.InjectionRate ?? 0),
-                LatencyGenerator = _ => ValueTask.FromResult(faults().For(channel)?.Latency ?? TimeSpan.Zero),
+                EnabledGenerator = args => ValueTask.FromResult(Active(args.Context, FaultMode.Latency)),
+                InjectionRateGenerator = args => ValueTask.FromResult(Rate(args.Context)),
+                LatencyGenerator = args => ValueTask.FromResult(Resolve(args.Context)?.Latency ?? TimeSpan.Zero),
             })
             .AddChaosOutcome(new ChaosOutcomeStrategyOptions<HttpResponseMessage>
             {
-                EnabledGenerator = _ => ValueTask.FromResult(faults().IsActive(channel, FaultMode.Error)),
-                InjectionRateGenerator = _ => ValueTask.FromResult(faults().For(channel)?.InjectionRate ?? 0),
+                EnabledGenerator = args => ValueTask.FromResult(Active(args.Context, FaultMode.Error)),
+                InjectionRateGenerator = args => ValueTask.FromResult(Rate(args.Context)),
                 OutcomeGenerator = _ => ValueTask.FromResult<Outcome<HttpResponseMessage>?>(
                     Outcome.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))),
             })
             .AddChaosFault(new ChaosFaultStrategyOptions
             {
-                EnabledGenerator = _ => ValueTask.FromResult(faults().IsActive(channel, FaultMode.Unavailable)),
-                InjectionRateGenerator = _ => ValueTask.FromResult(faults().For(channel)?.InjectionRate ?? 0),
+                EnabledGenerator = args => ValueTask.FromResult(Active(args.Context, FaultMode.Unavailable)),
+                InjectionRateGenerator = args => ValueTask.FromResult(Rate(args.Context)),
                 FaultGenerator = _ => ValueTask.FromResult<Exception?>(
                     new HttpRequestException("Canal indisponível (falha injetada).")),
             });
     }
 
-    private static ValueTask Report(ChannelCircuits circuits, Channel channel, ChannelCircuitState state)
+    private static ValueTask Report(ChannelCircuits circuits, Channel channel, string partition, ChannelCircuitState state)
     {
-        circuits.Report(channel, state);
+        circuits.Report(channel, partition, state);
+        Activity.Current?.AddEvent(new ActivityEvent(
+            "circuit " + state.ToString().ToLowerInvariant(),
+            tags: new ActivityTagsCollection { ["channel"] = channel.Slug() }));
         return ValueTask.CompletedTask;
     }
 }

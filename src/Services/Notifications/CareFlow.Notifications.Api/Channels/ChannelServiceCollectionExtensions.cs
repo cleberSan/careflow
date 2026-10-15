@@ -2,6 +2,7 @@ using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Api.Channels.Simulated;
 using CareFlow.Notifications.Domain.Channels;
 
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 
 namespace CareFlow.Notifications.Api.Channels;
@@ -22,10 +23,15 @@ internal static class ChannelServiceCollectionExtensions
         services.AddOptions<FaultInjectionOptions>()
             .BindConfiguration(FaultInjectionOptions.SectionName)
             .ValidateDataAnnotations()
+            .Validate<IHostEnvironment>(
+                (options, environment) => !(options.ClinicOverridesEnabled && environment.IsProduction()),
+                "FaultInjection:ClinicOverridesEnabled não pode ser ligado em produção.")
             .ValidateOnStart();
 
         services.AddSingleton<SimulatedProviderLedger>();
         services.AddSingleton<ChannelCircuits>();
+        services.AddSingleton<ClinicIsolation>();
+        services.AddScoped<ClinicFaultResolver>();
         services.AddSingleton<ChannelGateway>();
         services.AddSingleton<ChannelRouter>();
 
@@ -44,8 +50,12 @@ internal static class ChannelServiceCollectionExtensions
                         channel,
                         services.GetRequiredService<IOptions<ChannelResilienceOptions>>().Value,
                         services.GetRequiredService<ChannelCircuits>(),
+                        context.InstanceName,
                         () => faults.CurrentValue);
-                });
+                })
+
+                // Um pipeline (e um circuit breaker) por partição; a lista de partições é fixa e curta.
+                .SelectPipelineBy(_ => request => ChannelCall.Of(request)?.Partition ?? ClinicIsolation.Shared);
 
             services.AddHttpClient(ChannelGateway.StatusClientName(channel), client => client.BaseAddress = baseAddress)
                 .ConfigurePrimaryHttpMessageHandler(sp => CreateSimulatedProvider(sp, channel))
