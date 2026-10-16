@@ -21,6 +21,15 @@ public sealed record OutboxRow(string Type, JsonElement Payload)
 
 public static class OutboxRows
 {
+    /// <summary>A resposta do serviço a um pedido do titular (<c>rights.subject-request-answered</c>).</summary>
+    public static JsonElement AnswerTo(this IReadOnlyList<OutboxRow> rows, Guid requestId)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return rows
+            .Single(row => row.Type == "rights.subject-request-answered" && row.Payload.GetProperty("requestId").GetGuid() == requestId)
+            .Payload;
+    }
+
     /// <summary>Eventos da clínica no Outbox, em ordem de criação. Conecta como admin, sem RLS.</summary>
     public static async Task<IReadOnlyList<OutboxRow>> ReadAsync(string adminConnectionString, Guid tenantId, CancellationToken cancellationToken)
     {

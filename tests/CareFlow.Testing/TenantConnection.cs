@@ -43,4 +43,34 @@ public static class TenantConnection
 
         return await command.ExecuteNonQueryAsync();
     }
+
+    public static async Task<T?> ScalarAsync<T>(this NpgsqlConnection connection, string sql, params (string Name, object Value)[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        var result = await command.ExecuteScalarAsync();
+        return result is null or DBNull ? default : (T)result;
+    }
+}
+
+/// <summary>Comandos como admin (sem RLS), para preparar cenários e conferir o banco por fora da API.</summary>
+public static class AdminSql
+{
+    public static async Task<int> ExecuteAsync(string adminConnectionString, string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = await TenantConnection.OpenAsync(adminConnectionString, tenantId: null);
+        return await connection.ExecuteAsync(sql, parameters);
+    }
+
+    public static async Task<T?> ScalarAsync<T>(string adminConnectionString, string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = await TenantConnection.OpenAsync(adminConnectionString, tenantId: null);
+        return await connection.ScalarAsync<T>(sql, parameters);
+    }
 }

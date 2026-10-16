@@ -24,5 +24,7 @@ internal sealed class PatientStatusConfiguration : IEntityTypeConfiguration<Pati
         builder.Property(p => p.SchedulingConsent).HasColumnName("scheduling_consent").HasConversion<string>().HasMaxLength(16);
         builder.Property(p => p.ConsentVersion).HasColumnName("consent_version");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
+        builder.Property(p => p.ErasedAt).HasColumnName("erased_at");
+        builder.Ignore(p => p.IsErased);
     }
 }

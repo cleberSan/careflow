@@ -6,10 +6,12 @@ using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Contracts.Consents;
 using CareFlow.Contracts.Patients;
+using CareFlow.Contracts.Rights;
 using CareFlow.Scheduling.Api.Common.Observability;
 using CareFlow.Scheduling.Api.Common.Security;
 using CareFlow.Scheduling.Api.Features.Appointments;
 using CareFlow.Scheduling.Api.Features.Patients;
+using CareFlow.Scheduling.Api.Features.Rights;
 using CareFlow.Scheduling.Api.Infrastructure;
 using CareFlow.Scheduling.Api.Infrastructure.Persistence;
 
@@ -58,7 +60,10 @@ builder.Services
     .AddConsumer<SchedulingDbContext>(consumers => consumers
         .Handle<PatientRegistered, PatientRegisteredConsumer>()
         .Handle<ConsentGranted, ConsentGrantedConsumer>()
-        .Handle<ConsentRevoked, ConsentRevokedConsumer>());
+        .Handle<ConsentRevoked, ConsentRevokedConsumer>()
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>()
+        .Handle<ErasureReapplied, ErasureReappliedConsumer>());
+builder.Services.AddScoped<SchedulingEraser>();
 
 var app = builder.Build();
 

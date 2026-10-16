@@ -201,7 +201,7 @@ namespace CareFlow.Scheduling.Api.Infrastructure.Persistence.Migrations
 
                     b.ToTable("appointments", null, t =>
                         {
-                            t.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked')");
+                            t.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked', 'SubjectErasure')");
 
                             t.HasCheckConstraint("ck_appointments_interval", "ends_at > starts_at");
 
@@ -222,6 +222,10 @@ namespace CareFlow.Scheduling.Api.Infrastructure.Persistence.Migrations
                     b.Property<long>("ConsentVersion")
                         .HasColumnType("bigint")
                         .HasColumnName("consent_version");
+
+                    b.Property<DateTimeOffset?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
 
                     b.Property<bool>("IsRegistered")
                         .HasColumnType("boolean")

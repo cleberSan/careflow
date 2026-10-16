@@ -23,4 +23,7 @@ public static class AppointmentCancellationReasons
 
     /// <summary>Cancelada porque o paciente revogou o consentimento para agendamento.</summary>
     public const string ConsentRevoked = "consent-revoked";
+
+    /// <summary>Cancelada porque o titular pediu a eliminação. O paciente não recebe aviso de cancelamento.</summary>
+    public const string SubjectErasure = "subject-erasure";
 }

@@ -20,7 +20,7 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
         {
             table.HasCheckConstraint("ck_appointments_interval", "ends_at > starts_at");
             table.HasCheckConstraint("ck_appointments_status", "status IN ('Booked', 'Cancelled')");
-            table.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked')");
+            table.HasCheckConstraint("ck_appointments_cancellation_reason", "cancellation_reason IS NULL OR cancellation_reason IN ('Requested', 'ConsentRevoked', 'SubjectErasure')");
         });
 
         builder.HasKey(a => a.Id).HasName("pk_appointments");
