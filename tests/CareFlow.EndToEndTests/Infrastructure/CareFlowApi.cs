@@ -206,7 +206,8 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 
     /// <summary>
     /// O código de 6 dígitos como chegou ao paciente, lido no provedor simulado do Notifications (a caixa de entrada
-    /// do Painel). Espera o código ser enviado.
+    /// do Painel). Espera o código ser enviado e o Rights registrar o envio: a mensagem aparece na caixa antes de o
+    /// evento de envio ser consumido, e confirmar nesse intervalo disputa a mesma linha do pedido (409 de concorrência).
     /// </summary>
     public async Task<string> VerificationCodeAsync(Guid requestId)
     {
@@ -217,6 +218,10 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
             description: "código de confirmação na caixa de entrada simulada");
         var match = System.Text.RegularExpressions.Regex.Match(messages[^1].Text, @"\b(\d{6})\b");
         Assert.True(match.Success, "Mensagem sem código de 6 dígitos.");
+        await Eventually.GetAsync(
+            () => SubjectRequestAsync(requestId),
+            request => request.CodeChannel is not null,
+            description: "envio do código registrado no pedido");
         return match.Groups[1].Value;
     }
 
