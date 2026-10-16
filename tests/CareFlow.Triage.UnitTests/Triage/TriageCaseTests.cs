@@ -150,6 +150,30 @@ public sealed class TriageCaseTests
         Assert.Equal(TriageErrors.AlreadyReviewed, second.Error);
         Assert.Equal(TriagePriority.LessUrgent, triage.FinalPriority);
     }
+
+    [Fact]
+    public void EraseText_RemovesTexts_KeepsSuggestionDigestAndDecision()
+    {
+        // Arrange
+        var triage = Open();
+        triage.Review("prof-1", ReviewDecision.Confirmed, null, Now);
+        var digest = triage.PromptDigest;
+
+        // Act
+        var first = triage.EraseText(Now.AddDays(1));
+        var second = triage.EraseText(Now.AddDays(2));
+
+        // Assert
+        Assert.True(first);
+        Assert.False(second);
+        Assert.Null(triage.Complaint);
+        Assert.Null(triage.SentToModel);
+        Assert.Null(triage.Rationale);
+        Assert.Equal(digest, triage.PromptDigest);
+        Assert.Equal(TriagePriority.LessUrgent, triage.FinalPriority);
+        Assert.Equal(["dor-no-peito"], triage.AlarmSigns);
+        Assert.Equal(Now.AddDays(1), triage.ErasedAt);
+    }
 }
 
 public sealed class TriageConsentTests

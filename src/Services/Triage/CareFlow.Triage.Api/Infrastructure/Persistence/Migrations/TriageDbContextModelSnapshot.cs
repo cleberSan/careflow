@@ -139,7 +139,6 @@ namespace CareFlow.Triage.Api.Infrastructure.Persistence.Migrations
                         .HasColumnName("alarm_signs");
 
                     b.Property<string>("Complaint")
-                        .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("complaint");
@@ -153,6 +152,10 @@ namespace CareFlow.Triage.Api.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("decision");
+
+                    b.Property<DateTimeOffset?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
 
                     b.Property<int?>("FinalPriority")
                         .HasColumnType("integer")
@@ -248,7 +251,7 @@ namespace CareFlow.Triage.Api.Infrastructure.Persistence.Migrations
 
                     b.ToTable("triage_cases", null, t =>
                         {
-                            t.HasCheckConstraint("ck_triage_cases_complaint", "char_length(complaint) BETWEEN 3 AND 1000");
+                            t.HasCheckConstraint("ck_triage_cases_complaint", "(complaint IS NULL AND erased_at IS NOT NULL) OR char_length(complaint) BETWEEN 3 AND 1000");
 
                             t.HasCheckConstraint("ck_triage_cases_decision", "decision IN ('Pending', 'Confirmed', 'Corrected')");
 
@@ -258,7 +261,7 @@ namespace CareFlow.Triage.Api.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_triage_cases_review", "(decision = 'Pending') = (final_priority IS NULL AND reviewed_by IS NULL AND reviewed_at IS NULL)");
 
-                            t.HasCheckConstraint("ck_triage_cases_sent", "(sent_to_model IS NULL) = (prompt_digest IS NULL)");
+                            t.HasCheckConstraint("ck_triage_cases_sent", "(sent_to_model IS NULL) = (prompt_digest IS NULL) OR erased_at IS NOT NULL");
 
                             t.HasCheckConstraint("ck_triage_cases_source", "source IN ('None', 'Model', 'ModelRaisedByRules', 'Rules')");
                         });
