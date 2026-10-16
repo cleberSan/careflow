@@ -7,7 +7,9 @@ using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Consent.Api.Common.Observability;
 using CareFlow.Consent.Api.Common.Security;
 using CareFlow.Consent.Api.Features.Consents;
+using CareFlow.Consent.Api.Features.Rights;
 using CareFlow.Consent.Api.Infrastructure.Persistence;
+using CareFlow.Contracts.Rights;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -35,10 +37,14 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddConsentDatabase(builder.Configuration);
 
-// O Consent só publica: ConsentGranted/ConsentRevoked e os acessos para a auditoria.
+// O Consent publica ConsentGranted/ConsentRevoked e os acessos para a auditoria, e responde aos pedidos do titular.
+builder.Services.AddScoped<ConsentEraser>();
 builder.Services
     .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
-    .AddOutbox();
+    .AddOutbox()
+    .AddConsumer<ConsentDbContext>(consumers => consumers
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>()
+        .Handle<ErasureReapplied, ErasureReappliedConsumer>());
 
 builder.Services.AddConsentFeatures();
 

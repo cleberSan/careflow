@@ -28,4 +28,9 @@ public static class ConsentErrors
 
     public static readonly Error ConcurrentChange = Error.Conflict(
         "Consentimento.AlteracaoConcorrente", "O consentimento foi alterado por outra requisição. Tente novamente.");
+
+    /// <summary>O titular pediu a eliminação: o pseudônimo não recebe mais consentimentos.</summary>
+    public static readonly Error SubjectErased = Error.Conflict(
+        "Consentimento.TitularEliminado",
+        "Os dados deste paciente foram eliminados a pedido do titular. Um novo cadastro gera outro pseudônimo.");
 }

@@ -22,6 +22,40 @@ namespace CareFlow.Consent.Api.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Inbox.InboxMessage", b =>
+                {
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("consumer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Consumer", "MessageId")
+                        .HasName("pk_inbox_messages");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_inbox_messages_processed_at");
+
+                    b.ToTable("inbox_messages", (string)null);
+                });
+
             modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -83,6 +117,98 @@ namespace CareFlow.Consent.Api.Infrastructure.Persistence.Migrations
                     b.ToTable("outbox_messages", null, t =>
                         {
                             t.HasCheckConstraint("ck_outbox_messages_attempts", "attempts >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CareFlow.Consent.Api.Infrastructure.Persistence.ErasedSubject", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PatientRef")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_ref");
+
+                    b.Property<DateTimeOffset>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
+                    b.HasKey("TenantId", "PatientRef")
+                        .HasName("pk_erased_subjects");
+
+                    b.ToTable("erased_subjects", (string)null);
+                });
+
+            modelBuilder.Entity("CareFlow.Consent.Domain.Consents.ConsentHistoryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Change")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("change");
+
+                    b.Property<Guid>("ConsentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("consent_id");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("legal_basis");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("PatientRef")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_ref");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("purpose");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TermVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("term_version");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_consent_history");
+
+                    b.HasIndex("ConsentId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_consent_history_consent_version");
+
+                    b.HasIndex("TenantId", "PatientRef", "OccurredAt")
+                        .HasDatabaseName("ix_consent_history_patient");
+
+                    b.ToTable("consent_history", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_consent_history_change", "change IN ('Granted', 'Revoked')");
+
+                            t.HasCheckConstraint("ck_consent_history_version", "version > 0");
                         });
                 });
 
