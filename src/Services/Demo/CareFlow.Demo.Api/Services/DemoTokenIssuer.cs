@@ -145,7 +145,12 @@ internal sealed class ServiceAuthenticationHandler(IServiceAuthenticator authent
             throw new InvalidOperationException("Chamada a serviço sem clínica e escopos definidos.");
         }
 
-        authenticator.Authenticate(request, call);
+        // Sem escopos é chamada anônima de propósito (o download pelo link, como o titular faria): sem token.
+        if (call.Scopes.Count > 0)
+        {
+            authenticator.Authenticate(request, call);
+        }
+
         return base.SendAsync(request, cancellationToken);
     }
 }

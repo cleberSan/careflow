@@ -8,8 +8,8 @@ using CareFlow.Rights.Api.Common.Cryptography;
 using CareFlow.Rights.Api.Common.Observability;
 using CareFlow.Rights.Api.Common.Security;
 using CareFlow.Rights.Api.Features;
-using CareFlow.Rights.Api.Features.Messaging;
 using CareFlow.Rights.Api.Features.Exports;
+using CareFlow.Rights.Api.Features.Messaging;
 using CareFlow.Rights.Api.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;

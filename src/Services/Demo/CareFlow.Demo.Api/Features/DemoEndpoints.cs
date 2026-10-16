@@ -58,6 +58,7 @@ internal static class DemoEndpoints
         session.MapDelete("/channels/whatsapp/fault", RestoreWhatsAppAsync);
         session.MapGet("/traces/{traceId}", TraceAsync);
         session.MapGet("/traces/{traceId}/logs", LogsAsync);
+        session.MapRightsDemoEndpoints();
         return app;
     }
 
@@ -333,7 +334,7 @@ internal static class DemoEndpoints
         return error.ToProblem();
     }
 
-    private static string Track(DemoSession session)
+    internal static string Track(DemoSession session)
     {
         var traceId = Activity.Current?.TraceId.ToHexString() ?? ActivityTraceId.CreateRandom().ToHexString();
         session.AddTrace(traceId);

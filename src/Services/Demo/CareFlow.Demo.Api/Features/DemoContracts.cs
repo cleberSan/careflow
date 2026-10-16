@@ -78,3 +78,58 @@ public sealed record TriageView(
 }
 
 public sealed record AiConsentView(string State, long Version);
+
+/// <summary><c>access</c>, <c>portability</c> ou <c>erasure</c>.</summary>
+public sealed record RightsRequestBody(string? Kind);
+
+/// <summary>Código de 6 dígitos que chegou na caixa de entrada simulada.</summary>
+public sealed record IdentityCodeBody(string? Code)
+{
+    public override string ToString() => "IdentityCodeBody { *** }";
+}
+
+public sealed record RightsServiceView(string Service, string? Outcome, DateTimeOffset? AnsweredAt);
+
+public sealed record RightsReceiptLineView(string Service, string Item, string Description, string Action, int Records, DateTimeOffset? RetainedUntil, string Basis);
+
+public sealed record RightsReceiptView(string PolicyVersion, DateTimeOffset ErasedAt, IReadOnlyList<RightsReceiptLineView> Lines);
+
+public sealed record RightsPackageView(bool Available, long Size, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? DestroyedAt);
+
+/// <summary>Um pedido do titular no Painel: situação, prazo, andamento por serviço, comprovante e pacote.</summary>
+public sealed record RightsRequestView(
+    Guid Id,
+    string Kind,
+    string Status,
+    string? DenialReason,
+    DateTimeOffset ReceivedAt,
+    DateTimeOffset DueAt,
+    bool Overdue,
+    DateTimeOffset? CodeSentAt,
+    string? CodeChannel,
+    DateTimeOffset? IdentityConfirmedAt,
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<RightsServiceView> Services,
+    RightsReceiptView? Receipt,
+    RightsPackageView? Package,
+    string? TraceId);
+
+public sealed record InboxMessageView(string Channel, string Text, DateTimeOffset AcceptedAt);
+
+public sealed record PackageFileView(string Name, long Bytes);
+
+/// <summary>
+/// O pacote como o titular o recebeu pelo link: os arquivos, as seções de cada serviço, os recursos FHIR e se o
+/// mesmo link foi recusado na segunda vez.
+/// </summary>
+public sealed record PackageContentsView(
+    IReadOnlyList<PackageFileView> Files,
+    IReadOnlyList<string> Sections,
+    IReadOnlyList<string> FhirResources,
+    string? PatientName,
+    DateTimeOffset? LinkExpiresAt,
+    bool ReuseRefused,
+    string TraceId);
+
+/// <summary>Depois da eliminação: o cofre não lê mais o paciente, e a cadeia da auditoria continua íntegra.</summary>
+public sealed record ErasureEvidenceView(bool VaultReadable, int VaultStatus, IReadOnlyList<AuditEntryView> Audit, ChainView Chain);

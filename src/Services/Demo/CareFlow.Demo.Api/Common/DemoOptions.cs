@@ -42,6 +42,10 @@ internal sealed class DemoOptions
     [Range(1, 20)]
     public int MaxTriagesPerSession { get; set; } = 6;
 
+    /// <summary>Pedidos do titular por sessão (acesso, portabilidade e eliminação, com folga para repetir).</summary>
+    [Range(1, 10)]
+    public int MaxRightsRequestsPerSession { get; set; } = 4;
+
     [Range(typeof(TimeSpan), "00:00:10", "00:15:00")]
     public TimeSpan WhatsAppFaultDuration { get; set; } = TimeSpan.FromMinutes(2);
 
@@ -83,6 +87,9 @@ internal sealed class DemoServiceAddresses
 
     [Required]
     public Uri? Triage { get; set; }
+
+    [Required]
+    public Uri? Rights { get; set; }
 }
 
 internal sealed class DemoRateLimits

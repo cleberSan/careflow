@@ -15,8 +15,10 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
     private readonly List<Guid> _appointments = [];
     private readonly HashSet<string> _traces = new(StringComparer.Ordinal);
     private readonly HashSet<Guid> _triages = [];
+    private readonly List<Guid> _rightsRequests = [];
     private int _bookingsReserved;
     private int _triagesReserved;
+    private int _rightsReserved;
 
     /// <summary>Hash SHA-256 do valor do cookie; o valor em si nunca é guardado.</summary>
     public string Id { get; } = id;
@@ -95,6 +97,38 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
         lock (_gate)
         {
             return _triages.Contains(triage);
+        }
+    }
+
+    /// <summary>Reserva um pedido do titular da sessão (conta mesmo se o serviço recusar); falso no limite.</summary>
+    public bool TryReserveRightsRequest(int limit)
+    {
+        lock (_gate)
+        {
+            if (_rightsReserved >= limit)
+            {
+                return false;
+            }
+
+            _rightsReserved++;
+            return true;
+        }
+    }
+
+    public void AddRightsRequest(Guid request)
+    {
+        lock (_gate)
+        {
+            _rightsRequests.Add(request);
+        }
+    }
+
+    /// <summary>Só pedidos que a própria sessão abriu (o id vem do navegador).</summary>
+    public bool OwnsRightsRequest(Guid request)
+    {
+        lock (_gate)
+        {
+            return _rightsRequests.Contains(request);
         }
     }
 
