@@ -18,7 +18,21 @@ internal static class VaultAudit
     public const string LookedUp = "patient.lookup";
     public const string ContactRead = "patient.contact.read";
     public const string TriageProfileRead = "patient.triage-profile.read";
+    public const string Exported = "patient.exported";
+    public const string Erased = "patient.erased";
+    public const string ErasureReapplied = "patient.erasure-reapplied";
+
+    /// <summary>Ator das ações feitas em resposta a um pedido do titular (o pedido em si fica no serviço de direitos).</summary>
+    public const string RightsActor = "careflow-rights";
+
+    // Operações na chave da clínica: o recurso é a própria clínica (o id é o do tenant).
+    public const string TenantKeyResource = "tenant-key";
+    public const string TenantKeyRotated = "tenant-key.rotated";
+    public const string TenantKeyDestroyed = "tenant-key.destroyed";
 
     public static void Record(this VaultDbContext db, Guid tenantId, Guid patientRef, string actor, string action, DateTimeOffset now) =>
         db.RecordAccess(tenantId, SourceService, actor, action, ResourceType, patientRef, now);
+
+    public static void Record(this VaultDbContext db, Guid tenantId, Guid resourceId, string actor, string action, string resourceType, DateTimeOffset now) =>
+        db.RecordAccess(tenantId, SourceService, actor, action, resourceType, resourceId, now);
 }

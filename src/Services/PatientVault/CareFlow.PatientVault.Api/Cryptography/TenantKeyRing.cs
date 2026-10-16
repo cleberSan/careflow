@@ -121,6 +121,84 @@ internal sealed class TenantKeyRing(
         }
     }
 
+    /// <summary>Todas as versões da chave da clínica, da mais nova para a mais antiga.</summary>
+    public async Task<IReadOnlyList<TenantDataKey>> AllAsync(CancellationToken cancellationToken)
+    {
+        var versions = await db.TenantKeys.AsNoTracking()
+            .OrderByDescending(k => k.Version)
+            .Select(k => k.Version)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var keys = new List<TenantDataKey>(versions.Count);
+        foreach (var version in versions)
+        {
+            keys.Add(await GetAsync(version, cancellationToken).ConfigureAwait(false));
+        }
+
+        return keys;
+    }
+
+    /// <summary>O blind index do CPF em cada versão da chave da clínica (normalmente uma só; duas durante uma rotação).</summary>
+    public async Task<IReadOnlyList<byte[]>> CpfIndexesAsync(Domain.Patients.Cpf cpf, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(cpf);
+        var keys = await AllAsync(cancellationToken).ConfigureAwait(false);
+        return [.. keys.Select(key => PatientProtector.IndexCpf(cpf, key))];
+    }
+
+    /// <summary>
+    /// Rotação: cria a versão seguinte da chave da clínica, que passa a ser a atual. As chaves dos pacientes e os
+    /// blind indexes migram depois, em lotes (<c>KeyMaintenance</c>); as versões antigas continuam decifrando até lá.
+    /// </summary>
+    public async Task<TenantDataKey> RotateAsync(CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.TenantId;
+        var latest = await db.TenantKeys.AsNoTracking()
+            .OrderByDescending(k => k.Version)
+            .Select(k => (int?)k.Version)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var version = (latest ?? 0) + 1;
+
+        var dataKey = RandomNumberGenerator.GetBytes(LocalKeyManagementService.KeySizeBytes);
+        try
+        {
+            var wrapped = await kms.WrapKeyAsync(dataKey, new KeyWrapContext(tenantId, version), cancellationToken).ConfigureAwait(false);
+            db.TenantKeys.Add(new TenantKeyRecord
+            {
+                TenantId = tenantId,
+                Version = version,
+                KeyEncryptionKeyId = wrapped.KeyEncryptionKeyId,
+                WrappedKey = wrapped.Ciphertext,
+                CreatedAt = time.GetUtcNow(),
+            });
+
+            // Rotação simultânea da mesma clínica: a chave primária recusa a segunda com a mesma versão.
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            metrics.TenantKeyCreated();
+
+            var key = TenantDataKey.Derive(tenantId, version, dataKey);
+            Cache(key, current: true);
+            return key;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    /// <summary>Tira uma versão do cache desta instância depois de destruída. Outras instâncias a esquecem no TTL.</summary>
+    public void Forget(int version)
+    {
+        var tenantId = tenant.TenantId;
+        cache.Remove(VersionCacheKey(tenantId, version));
+        if (cache.TryGetValue(CurrentCacheKey(tenantId), out TenantDataKey? current) && current?.Version == version)
+        {
+            cache.Remove(CurrentCacheKey(tenantId));
+        }
+    }
+
     private async Task<TenantDataKey> UnwrapAndCacheAsync(TenantKeyRecord record, bool current, CancellationToken cancellationToken)
     {
         var dataKey = await kms.UnwrapKeyAsync(

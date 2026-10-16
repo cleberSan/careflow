@@ -2,11 +2,14 @@ using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.BuildingBlocks.Persistence.Demo;
+using CareFlow.Contracts.Rights;
 using CareFlow.PatientVault.Api.Common.Observability;
 using CareFlow.PatientVault.Api.Common.Security;
 using CareFlow.PatientVault.Api.Cryptography;
 using CareFlow.PatientVault.Api.Cryptography.KeyManagement;
+using CareFlow.PatientVault.Api.Features.Keys;
 using CareFlow.PatientVault.Api.Features.Patients;
+using CareFlow.PatientVault.Api.Features.Rights;
 using CareFlow.PatientVault.Api.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -39,15 +42,21 @@ builder.Services.AddOptions<KeyCacheOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddScoped<TenantKeyRing>();
+builder.Services.AddScoped<PatientKeyRing>();
 
 builder.Services.AddVaultDatabase(builder.Configuration);
 
 builder.Services.AddPatientFeatures();
+builder.Services.AddKeyFeatures();
 
-// O cofre só publica: cadastro de paciente para a agenda e acessos para a auditoria.
+// O cofre publica cadastro de paciente para a agenda e acessos para a auditoria, e responde aos pedidos do titular.
+builder.Services.AddScoped<PatientEraser>();
 builder.Services
     .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
-    .AddOutbox();
+    .AddOutbox()
+    .AddConsumer<VaultDbContext>(consumers => consumers
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>()
+        .Handle<ErasureReapplied, ErasureReappliedConsumer>());
 
 var app = builder.Build();
 
@@ -68,6 +77,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 app.MapPatientEndpoints();
+app.MapKeyEndpoints();
 
 app.MapDemoPurgeIfEnabled(DatabaseExtensions.ConnectionStringName, AuthorizationPolicies.DemoPurge);
 

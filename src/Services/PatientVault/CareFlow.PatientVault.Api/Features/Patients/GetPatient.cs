@@ -17,7 +17,7 @@ internal static class GetPatientEndpoint
     public static async Task<Results<Ok<PatientResponse>, ProblemHttpResult>> HandleAsync(
         Guid patientRef,
         VaultDbContext db,
-        TenantKeyRing keys,
+        PatientKeyRing keys,
         VaultMetrics metrics,
         TimeProvider time,
         HttpResponse response,
@@ -33,7 +33,12 @@ internal static class GetPatientEndpoint
             return PatientErrors.NotFound.ToProblem();
         }
 
-        var key = await keys.GetAsync(record.KeyVersion, cancellationToken).ConfigureAwait(false);
+        if (record.IsErased)
+        {
+            return PatientErrors.Erased.ToProblem();
+        }
+
+        var key = await keys.ForReadingAsync(record, cancellationToken).ConfigureAwait(false);
         var patient = PatientProtector.Unprotect(record, key);
 
         // Revelar dados pessoais é o acesso que mais importa na trilha. Se o registro falhar, a resposta

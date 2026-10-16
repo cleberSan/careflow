@@ -14,6 +14,7 @@ public sealed class ErrorTests
         { Error.Forbidden, ErrorType.Forbidden },
         { Error.PreconditionFailed, ErrorType.PreconditionFailed },
         { Error.PreconditionRequired, ErrorType.PreconditionRequired },
+        { Error.Gone, ErrorType.Gone },
     };
 
     [Theory]

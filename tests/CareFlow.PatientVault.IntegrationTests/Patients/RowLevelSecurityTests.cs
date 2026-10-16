@@ -19,6 +19,7 @@ public sealed class RowLevelSecurityTests(VaultApiFixture api)
     [Theory]
     [InlineData("patients")]
     [InlineData("tenant_keys")]
+    [InlineData("patient_keys")]
     public async Task WithoutClinicInSession_SeesNoRows(string table)
     {
         // Arrange
@@ -35,6 +36,7 @@ public sealed class RowLevelSecurityTests(VaultApiFixture api)
     [Theory]
     [InlineData("patients")]
     [InlineData("tenant_keys")]
+    [InlineData("patient_keys")]
     public async Task WithClinicInSession_SeesOnlyItsRows(string table)
     {
         // Arrange
@@ -84,7 +86,8 @@ public sealed class RowLevelSecurityTests(VaultApiFixture api)
 
     [Theory]
     [InlineData("DELETE FROM patients")]
-    [InlineData("DELETE FROM tenant_keys")]
+    [InlineData("TRUNCATE patient_keys")]
+    [InlineData("TRUNCATE tenant_keys")]
     [InlineData("UPDATE tenant_keys SET kek_id = 'x'")]
     [InlineData("ALTER TABLE patients DISABLE ROW LEVEL SECURITY")]
     public async Task ApplicationLogin_LacksDestructivePrivileges(string sql)
@@ -98,5 +101,34 @@ public sealed class RowLevelSecurityTests(VaultApiFixture api)
         // Assert
         var error = await Assert.ThrowsAsync<PostgresException>(act);
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+    }
+
+    [Fact]
+    public async Task DeletingClinicKeyStillInUse_IsRejectedByForeignKey()
+    {
+        // Arrange: a rotação precisa de DELETE em tenant_keys, mas uma versão que ainda protege dados não sai.
+        await RegisterAsync(_clinicA);
+        await using var connection = await TenantConnection.OpenAsync(api.ApplicationConnectionString, _clinicA);
+
+        // Act
+        var act = () => connection.ExecuteAsync("DELETE FROM tenant_keys");
+
+        // Assert
+        var error = await Assert.ThrowsAsync<PostgresException>(act);
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, error.SqlState);
+    }
+
+    [Fact]
+    public async Task DeletingAnotherClinicsPatientKey_AffectsNothing()
+    {
+        // Arrange
+        var patientOfB = await RegisterAsync(_clinicB);
+        await using var connection = await TenantConnection.OpenAsync(api.ApplicationConnectionString, _clinicA);
+
+        // Act
+        var affected = await connection.ExecuteAsync("DELETE FROM patient_keys WHERE patient_ref = @ref", ("ref", patientOfB));
+
+        // Assert
+        Assert.Equal(0, affected);
     }
 }

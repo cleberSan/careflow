@@ -12,6 +12,10 @@ public static class DbUpdateExceptionExtensions
     public static bool IsUniqueViolation(this DbUpdateException exception, string constraintName) =>
         IsViolation(exception, PostgresErrorCodes.UniqueViolation, constraintName);
 
+    /// <summary>Violação de chave estrangeira, de qualquer restrição.</summary>
+    public static bool IsForeignKeyViolation(this DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation };
+
     private static bool IsViolation(DbUpdateException exception, string sqlState, string constraintName) =>
         exception.InnerException is PostgresException postgres
         && postgres.SqlState == sqlState

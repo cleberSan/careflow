@@ -30,6 +30,7 @@ public static class ErrorHttpExtensions
         ErrorType.Conflict => StatusCodes.Status409Conflict,
         ErrorType.PreconditionFailed => StatusCodes.Status412PreconditionFailed,
         ErrorType.PreconditionRequired => StatusCodes.Status428PreconditionRequired,
+        ErrorType.Gone => StatusCodes.Status410Gone,
         _ => StatusCodes.Status500InternalServerError,
     };
 }

@@ -14,4 +14,7 @@ public enum ErrorType
     Forbidden,
     PreconditionFailed,
     PreconditionRequired,
+
+    /// <summary>O recurso existiu e foi eliminado de propósito (por exemplo, a pedido do titular).</summary>
+    Gone,
 }

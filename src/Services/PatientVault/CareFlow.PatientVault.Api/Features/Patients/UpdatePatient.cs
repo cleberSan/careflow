@@ -17,6 +17,7 @@ namespace CareFlow.PatientVault.Api.Features.Patients;
 internal sealed partial class UpdatePatientHandler(
     VaultDbContext db,
     TenantKeyRing keys,
+    PatientKeyRing patientKeys,
     TimeProvider time,
     VaultMetrics metrics,
     ILogger<UpdatePatientHandler> logger)
@@ -37,13 +38,18 @@ internal sealed partial class UpdatePatientHandler(
             return PatientErrors.NotFound;
         }
 
+        if (record.IsErased)
+        {
+            return PatientErrors.Erased;
+        }
+
         if (record.RowVersion != expectedVersion)
         {
             return PatientErrors.StaleVersion;
         }
 
-        var currentKey = await keys.GetAsync(record.KeyVersion, cancellationToken).ConfigureAwait(false);
-        var cpf = Cpf.Create(PatientProtector.Unprotect(record, currentKey).Cpf).Value;
+        var readKey = await patientKeys.ForReadingAsync(record, cancellationToken).ConfigureAwait(false);
+        var cpf = Cpf.Create(PatientProtector.Unprotect(record, readKey).Cpf).Value;
 
         var now = time.GetUtcNow();
         var data = PersonalData.Create(
@@ -53,9 +59,11 @@ internal sealed partial class UpdatePatientHandler(
             return data.Error;
         }
 
-        // Regrava com a chave atual da clínica: quando houver rotação de DEK, cada alteração já migra o registro.
-        var key = await keys.GetOrCreateCurrentAsync(cancellationToken).ConfigureAwait(false);
-        PatientProtector.Apply(record, data.Value, key, now);
+        // Regrava com a chave do paciente (criada aqui se o registro ainda era do esquema antigo) e o índice com a
+        // chave atual da clínica: cada alteração já migra o registro.
+        var indexKey = await keys.GetOrCreateCurrentAsync(cancellationToken).ConfigureAwait(false);
+        var patientKey = await patientKeys.ForWritingAsync(record, cancellationToken).ConfigureAwait(false);
+        PatientProtector.Apply(record, data.Value, patientKey, indexKey, now);
         db.Record(record.TenantId, record.PatientRef, actor, VaultAudit.Updated, now);
 
         // A versão esperada vira a original do EF: se outra alteração gravar entre a leitura e o UPDATE,
