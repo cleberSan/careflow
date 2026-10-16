@@ -22,5 +22,6 @@ internal sealed class AuditDbContext(DbContextOptions<AuditDbContext> options, I
         modelBuilder.Entity<AuditEntryRecord>().HasQueryFilter(entry => entry.TenantId == CurrentTenantId);
         modelBuilder.Entity<ChainHeadRecord>().HasQueryFilter(head => head.TenantId == CurrentTenantId);
         modelBuilder.AddInbox(() => CurrentTenantId);
+        modelBuilder.AddOutbox(() => CurrentTenantId);
     }
 }
