@@ -1,0 +1,7 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}

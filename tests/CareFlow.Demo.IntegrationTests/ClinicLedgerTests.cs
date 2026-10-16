@@ -74,6 +74,27 @@ public sealed class ClinicLedgerTests
     }
 
     [Fact]
+    public async Task LedgerThatCannotBeWritten_RefusesTheSession_AndGivesThePartitionBack()
+    {
+        // Arrange: uma partição só, e o temporário do registro ocupado por uma pasta (gravação falha, como num volume
+        // sem permissão).
+        await using var demo = DemoHost.Start(("Demo:Slots", "1"));
+        var blocker = demo.LedgerFile + ".tmp";
+        Directory.CreateDirectory(blocker);
+        using var visitor = demo.Visitor();
+
+        // Act
+        using var refused = await visitor.PostAsync("demo/v1/sessions", null, Ct);
+        Directory.Delete(blocker);
+        var session = await DemoHost.OpenAsync(visitor);
+
+        // Assert: nada foi criado nos serviços com o registro fora do ar, e a única partição voltou para o pool.
+        Assert.Equal(System.Net.HttpStatusCode.InternalServerError, refused.StatusCode);
+        Assert.Equal("isolated-01", session.Partition);
+        Assert.Single(Read(demo.LedgerFile));
+    }
+
+    [Fact]
     public void UnreadableLedger_FailsLoudly_InsteadOfForgettingClinics()
     {
         // Arrange
@@ -86,6 +107,27 @@ public sealed class ClinicLedgerTests
 
         // Assert
         Assert.Throws<InvalidOperationException>(act);
+        Directory.Delete(directory, recursive: true);
+    }
+
+    [Fact]
+    public void FailedRemove_KeepsTheEntry_SoTheCleanupIsRetried()
+    {
+        // Arrange
+        var directory = Directory.CreateTempSubdirectory("careflow-demo-it-").FullName;
+        var path = Path.Combine(directory, "clinicas.json");
+        var ledger = new FileClinicLedger(path);
+        var clinic = Guid.NewGuid();
+        ledger.Add(new LedgerEntry(clinic, 2, DateTimeOffset.UtcNow));
+        Directory.CreateDirectory(path + ".tmp");
+
+        // Act
+        var act = () => ledger.Remove(clinic);
+
+        // Assert
+        Assert.Throws<UnauthorizedAccessException>(act);
+        Assert.Equal(clinic, Assert.Single(ledger.Pending()).Clinic);
+        Assert.Equal(clinic, Assert.Single(Read(path)).Clinic);
         Directory.Delete(directory, recursive: true);
     }
 

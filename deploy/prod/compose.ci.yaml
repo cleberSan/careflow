@@ -1,0 +1,40 @@
+# Validação da stack de produção no CI e na máquina de quem desenvolve (ADR-0013). Nunca usado na VM.
+#   docker compose -p careflow -f compose.yaml -f compose.ci.yaml up -d --wait
+# O que muda em relação à VM: ambiente Staging (o provedor local de chaves é recusado na Demo), chave mestra local
+# no lugar do OCI Vault, certificado de uma CA local do Caddy e a 443 publicada só no loopback.
+x-staging: &staging
+  ASPNETCORE_ENVIRONMENT: Staging
+
+services:
+  caddy:
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.ci", "--adapter", "caddyfile"]
+    ports: !override ["127.0.0.1:443:443/tcp"]
+    environment:
+      CAREFLOW_ACME_EMAIL: ci@careflow.invalid
+
+  migrate-vault:
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/ci-keys.env"]
+    environment:
+      <<: *staging
+      KeyManagement__Provider: Local
+      KeyManagement__Local__ActiveKeyId: ci
+  migrate-consent: { environment: *staging }
+  migrate-scheduling: { environment: *staging }
+  migrate-notifications: { environment: *staging }
+  migrate-audit: { environment: *staging }
+  migrate-triage: { environment: *staging }
+  migrate-rights: { environment: *staging }
+
+  patient-vault:
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/ci-keys.env"]
+    environment:
+      <<: *staging
+      KeyManagement__Provider: Local
+      KeyManagement__Local__ActiveKeyId: ci
+  consent: { environment: *staging }
+  scheduling: { environment: *staging }
+  notifications: { environment: *staging }
+  audit: { environment: *staging }
+  triage: { environment: *staging }
+  rights: { environment: *staging }
+  demo: { environment: *staging }

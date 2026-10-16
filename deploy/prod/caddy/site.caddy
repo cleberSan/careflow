@@ -1,0 +1,53 @@
+# Corpo do site da demonstração hospedada, comum ao Caddyfile de produção e ao da validação no CI (ADR-0013).
+# Sem compressão: a resposta que abre a sessão carrega o token, e respostas pequenas não ganham nada com ela.
+
+# Corpo pequeno: o Demo não aceita mais de 4 KB; aqui o limite é a primeira barreira.
+request_body {
+	max_size 8KB
+}
+
+header {
+	Strict-Transport-Security "max-age=31536000"
+	X-Content-Type-Options nosniff
+	Referrer-Policy no-referrer
+	X-Frame-Options DENY
+	Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+	-Server
+	-Via
+}
+
+# Só as rotas do Painel e o estado. Saúde interna, métricas e qualquer outro caminho não existem por fora.
+@painel path /demo/v1/*
+handle @painel {
+	reverse_proxy demo:8080 {
+		# Nada fica na frente do Caddy: o X-Forwarded-For que o Demo recebe é sempre o endereço da conexão,
+		# nunca o que o navegador mandou (o Demo aceita só um salto e só da rede edge).
+		header_up X-Forwarded-For {remote_host}
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 30s
+		}
+	}
+}
+
+handle {
+	respond 404
+}
+
+log {
+	output stdout
+	format json
+	# Sem IP, cabeçalhos ou query string do visitante nos logs.
+	format filter {
+		wrap json
+		fields {
+			request>remote_ip delete
+			request>client_ip delete
+			request>headers delete
+			request>uri query {
+				delete *
+			}
+			resp_headers delete
+		}
+	}
+}

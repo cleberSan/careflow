@@ -1,0 +1,114 @@
+#cloud-config
+# VM da demonstração hospedada do CareFlow (ADR-0013): Oracle Cloud Always Free, Ampere A1 (arm64), Ubuntu 24.04.
+# Cole este arquivo, sem mudar nada, em "Show advanced options > Management > cloud-init script" ao criar a
+# instância. Ele não tem segredo nem dado da sua conta: isso vem depois, por SSH, com `sudo careflow-setup`.
+#
+# O que ele faz: atualiza o sistema e liga as atualizações automáticas de segurança, instala Docker e a CLI da
+# Oracle, fecha o SSH para só chave, abre só a 443 no firewall do sistema, cria o usuário "deploy" (sem shell
+# útil: só o comando forçado de deploy) e instala os scripts do repositório público.
+
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - unattended-upgrades
+  - iptables-persistent
+  - python3-venv
+  - curl
+  - jq
+
+users:
+  - default
+  - name: deploy
+    gecos: Deploy do CareFlow (só comando forçado)
+    shell: /bin/bash
+    lock_passwd: true
+
+timezone: Etc/UTC
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-careflow.conf
+    permissions: "0644"
+    content: |
+      # Só chave; nada de senha, root ou teclado interativo. O primeiro valor lido vale, por isso o prefixo 10.
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      AuthenticationMethods publickey
+      AllowUsers ubuntu deploy
+      MaxAuthTries 3
+      LoginGraceTime 20
+      X11Forwarding no
+      AllowAgentForwarding no
+      # O usuário ubuntu usa túnel local para o Grafana (ssh -L 3000:127.0.0.1:3000); o deploy não usa nada
+      # (restrict no authorized_keys).
+      AllowTcpForwarding local
+      PermitTunnel no
+
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "userland-proxy": false,
+        "no-new-privileges": true,
+        "live-restore": true,
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" }
+      }
+
+  - path: /etc/apt/apt.conf.d/52careflow-unattended
+    permissions: "0644"
+    content: |
+      // Atualizações de segurança todo dia; reinício automático de madrugada no Brasil quando o kernel pedir.
+      // A stack volta sozinha (restart: unless-stopped) e o Demo limpa as clínicas que sobraram.
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "06:30";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+  - path: /etc/sudoers.d/careflow-deploy
+    permissions: "0440"
+    content: |
+      # O usuário deploy só pode rodar o script de deploy; o próprio script valida os argumentos.
+      deploy ALL=(root) NOPASSWD: /usr/local/sbin/careflow-deploy
+
+  - path: /etc/careflow/demo/demo-switch.json
+    permissions: "0644"
+    content: |
+      { "Demo": { "Switch": { "Enabled": true } } }
+
+runcmd:
+  # Firewall do sistema: a imagem Ubuntu da Oracle já recusa tudo menos a 22; abre só a 443/tcp antes da recusa.
+  - |
+    if ! iptables -C INPUT -p tcp --dport 443 -m state --state NEW -j ACCEPT 2>/dev/null; then
+      position="$(iptables -L INPUT --line-numbers -n | awk '$2 == "REJECT" { print $1; exit }')"
+      iptables -I INPUT "${position:-1}" -p tcp --dport 443 -m state --state NEW -j ACCEPT
+    fi
+  - netfilter-persistent save
+
+  # 2 GB de swap como folga para picos de memória (a VM tem 12 GB; os limites dos containers somam menos de 8).
+  - test -f /swapfile || (fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab)
+
+  # CLI da Oracle numa venv própria, versão fixa; autentica como instance principal (sem chave na VM).
+  - python3 -m venv /opt/oci-cli
+  - /opt/oci-cli/bin/pip install --quiet --disable-pip-version-check oci-cli==3.94.2
+  - ln -sf /opt/oci-cli/bin/oci /usr/local/bin/oci
+
+  # Scripts e unidades do systemd do repositório público (branch main). Cada deploy reinstala os do commit no ar.
+  - mkdir -p /opt/careflow/releases /var/backups/careflow
+  - curl -fsSL --proto '=https' https://codeload.github.com/cleberSan/careflow/tar.gz/refs/heads/main | tar -xz -C /tmp --strip-components=3 --wildcards '*/deploy/prod/bin/*' '*/deploy/prod/systemd/*'
+  - install -o root -g root -m 0755 /tmp/bin/careflow-* /usr/local/sbin/
+  - install -o root -g root -m 0644 /tmp/systemd/* /etc/systemd/system/
+  - rm -rf /tmp/bin /tmp/systemd
+  - systemctl daemon-reload
+
+  - systemctl enable --now docker
+  - systemctl restart ssh
+  - systemctl enable --now unattended-upgrades
+
+final_message: "CareFlow: VM pronta em $UPTIME s. Entre por SSH e rode: sudo careflow-setup"

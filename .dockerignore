@@ -1,0 +1,8 @@
+# Só o que a imagem precisa (deploy/docker/Dockerfile copia global.json, props, src/ e as gravações da triagem).
+**/bin/
+**/obj/
+**/TestResults/
+.git/
+.github/
+tests/
+docs/

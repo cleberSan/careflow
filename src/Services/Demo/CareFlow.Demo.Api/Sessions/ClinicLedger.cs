@@ -77,8 +77,18 @@ internal sealed class FileClinicLedger : IClinicLedger
         ArgumentNullException.ThrowIfNull(entry);
         lock (_gate)
         {
+            var previous = _entries.GetValueOrDefault(entry.Clinic);
             _entries[entry.Clinic] = entry;
-            Save();
+            try
+            {
+                Save();
+            }
+            catch
+            {
+                // Memória e arquivo contam a mesma história: o que não foi gravado não fica registrado.
+                Restore(entry.Clinic, previous);
+                throw;
+            }
         }
     }
 
@@ -86,9 +96,19 @@ internal sealed class FileClinicLedger : IClinicLedger
     {
         lock (_gate)
         {
-            if (_entries.Remove(clinic))
+            if (!_entries.Remove(clinic, out var removed))
+            {
+                return;
+            }
+
+            try
             {
                 Save();
+            }
+            catch
+            {
+                Restore(clinic, removed);
+                throw;
             }
         }
     }
@@ -116,6 +136,18 @@ internal sealed class FileClinicLedger : IClinicLedger
         catch (JsonException exception)
         {
             throw new InvalidOperationException($"O registro de clínicas do Demo em {path} está ilegível. Confira o arquivo antes de apagar.", exception);
+        }
+    }
+
+    private void Restore(Guid clinic, LedgerEntry? entry)
+    {
+        if (entry is null)
+        {
+            _entries.Remove(clinic);
+        }
+        else
+        {
+            _entries[clinic] = entry;
         }
     }
 

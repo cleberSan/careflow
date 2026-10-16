@@ -1,0 +1,413 @@
+# Demonstração hospedada do CareFlow (ADR-0013): uma VM Ampere A1 (arm64) da Oracle, Always Free.
+# Quem sobe isto é o script careflow-deploy, nunca à mão:
+#   CAREFLOW_TAG=<commit> docker compose -p careflow --env-file /etc/careflow/release.env -f compose.yaml up -d --wait
+#
+# - Só o Caddy publica porta (443). Banco, broker, serviços e observabilidade não têm porta no host, exceto o
+#   Grafana, preso ao loopback da VM (acesso por túnel SSH).
+# - Segredos vêm de /etc/careflow/env/*.env (root, 0600), gerados na VM por careflow-generate-secrets. Nada aqui é
+#   segredo; este arquivo é público no repositório.
+# - Redes: "edge" (Caddy e Demo), "backend" (interna, sem saída para a internet) e "egress" (só o cofre, que fala
+#   com o OCI Vault). O Caddy precisa de saída para o Let's Encrypt.
+
+name: careflow
+
+x-service: &service
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  networks: [backend]
+  logging: &logging
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+  environment: &service-env
+    ASPNETCORE_ENVIRONMENT: Demo
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=demo,service.version=${CAREFLOW_TAG:?defina CAREFLOW_TAG}
+    Authentication__Schemes__Bearer__ValidIssuer: careflow-demo-hosted
+    Authentication__Schemes__Bearer__SigningKeys__0__Issuer: careflow-demo-hosted
+    Messaging__Enabled: "true"
+    Demo__PurgeEnabled: "true"
+    Logging__LogLevel__Default: Warning
+    Logging__LogLevel__CareFlow: Information
+
+x-migrate-env: &migrate-env
+  ASPNETCORE_ENVIRONMENT: Demo
+  Database__MigrateAndExit: "true"
+  Messaging__Enabled: "false"
+  Authentication__Schemes__Bearer__ValidIssuer: careflow-demo-hosted
+  Vault__BaseAddress: http://patient-vault:8080/
+  Triage__Model__Provider: Recorded
+  Triage__Model__RecordingsPath: /app/recordings
+
+x-migrate: &migrate
+  restart: "no"
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  networks: [backend]
+  logging: *logging
+  depends_on:
+    postgres: { condition: service_healthy }
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports: ["443:443/tcp"]
+    environment:
+      CAREFLOW_DOMAIN: ${CAREFLOW_DOMAIN:?defina CAREFLOW_DOMAIN em /etc/careflow/release.env}
+      CAREFLOW_ACME_EMAIL: ${CAREFLOW_ACME_EMAIL:?defina CAREFLOW_ACME_EMAIL (avisos do Let's Encrypt)}
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
+    mem_limit: 128m
+    logging: *logging
+    depends_on:
+      demo: { condition: service_healthy }
+
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/postgres.env"]
+    environment:
+      POSTGRES_USER: careflow
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "max_connections=200", "-c", "password_encryption=scram-sha-256"]
+    shm_size: 256m
+    networks: [backend]
+    mem_limit: 1536m
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careflow -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  rabbitmq:
+    image: rabbitmq:4.1.4-alpine
+    restart: unless-stopped
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/rabbitmq.env"]
+    environment:
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit vm_memory_high_watermark {absolute,\"350MiB\"}"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [backend]
+    mem_limit: 512m
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  # Migrations: um container de uma execução por serviço, com o dono do banco daquele serviço (sem superusuário).
+  # A API sobe só depois que ele termina (Database:MigrateAndExit, ADR-0013).
+  migrate-vault:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE:?defina CAREFLOW_IMAGE}:patient-vault-${CAREFLOW_TAG}
+    command: ["CareFlow.PatientVault.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/patient-vault.env"]
+    environment:
+      <<: *migrate-env
+      KeyManagement__Provider: OciVault
+  migrate-consent:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:consent-${CAREFLOW_TAG}
+    command: ["CareFlow.Consent.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/consent.env"]
+    environment:
+      <<: *migrate-env
+  migrate-scheduling:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:scheduling-${CAREFLOW_TAG}
+    command: ["CareFlow.Scheduling.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/scheduling.env"]
+    environment:
+      <<: *migrate-env
+  migrate-notifications:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:notifications-${CAREFLOW_TAG}
+    command: ["CareFlow.Notifications.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/notifications.env"]
+    environment:
+      <<: *migrate-env
+  migrate-audit:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:audit-${CAREFLOW_TAG}
+    command: ["CareFlow.Audit.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/audit.env"]
+    environment:
+      <<: *migrate-env
+  migrate-triage:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:triage-${CAREFLOW_TAG}
+    command: ["CareFlow.Triage.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/triage.env"]
+    environment:
+      <<: *migrate-env
+  migrate-rights:
+    <<: *migrate
+    image: ${CAREFLOW_IMAGE}:rights-${CAREFLOW_TAG}
+    command: ["CareFlow.Rights.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/rights.env"]
+    environment:
+      <<: *migrate-env
+
+  patient-vault:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:patient-vault-${CAREFLOW_TAG}
+    command: ["CareFlow.PatientVault.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/patient-vault.env"]
+    environment:
+      <<: *service-env
+      KeyManagement__Provider: OciVault
+    networks: [backend, egress]
+    mem_limit: 384m
+    healthcheck: &health
+      test: ["CMD", "dotnet", "CareFlow.PatientVault.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    depends_on: &service-deps
+      migrate-vault: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  consent:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:consent-${CAREFLOW_TAG}
+    command: ["CareFlow.Consent.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/consent.env"]
+    mem_limit: 320m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Consent.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-consent: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  scheduling:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:scheduling-${CAREFLOW_TAG}
+    command: ["CareFlow.Scheduling.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/scheduling.env"]
+    mem_limit: 320m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Scheduling.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-scheduling: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  notifications:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:notifications-${CAREFLOW_TAG}
+    command: ["CareFlow.Notifications.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/notifications.env"]
+    environment:
+      <<: *service-env
+      Vault__BaseAddress: http://patient-vault:8080/
+      FaultInjection__Enabled: "true"
+      FaultInjection__ClinicOverridesEnabled: "true"
+      FaultInjection__IsolatedSlots: "8"
+      Demo__SimulatedInboxEnabled: "true"
+    mem_limit: 384m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Notifications.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-notifications: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+      patient-vault: { condition: service_healthy }
+
+  audit:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:audit-${CAREFLOW_TAG}
+    command: ["CareFlow.Audit.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/audit.env"]
+    mem_limit: 320m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Audit.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-audit: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  triage:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:triage-${CAREFLOW_TAG}
+    command: ["CareFlow.Triage.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/triage.env"]
+    environment:
+      <<: *service-env
+      Vault__BaseAddress: http://patient-vault:8080/
+      # Respostas gravadas do modelo (ADR-0011); o modelo real exige LiveCallsEnabled, desligado aqui (ADR-0013).
+      Triage__Model__Provider: Recorded
+      Triage__Model__RecordingsPath: /app/recordings
+      Triage__Model__LiveCallsEnabled: "false"
+    mem_limit: 320m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Triage.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-triage: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+      patient-vault: { condition: service_healthy }
+
+  rights:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:rights-${CAREFLOW_TAG}
+    command: ["CareFlow.Rights.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/common.env", "${CAREFLOW_ENV_DIR:-/etc/careflow/env}/rights.env"]
+    mem_limit: 384m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Rights.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/ready"]
+    depends_on:
+      migrate-rights: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  # O único serviço que a internet alcança, pelo Caddy.
+  demo:
+    <<: *service
+    image: ${CAREFLOW_IMAGE}:demo-${CAREFLOW_TAG}
+    command: ["CareFlow.Demo.Api.dll"]
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/demo.env"]
+    environment:
+      <<: *service-env
+      Demo__AllowedOrigins__0: ${CAREFLOW_SITE_ORIGIN:?defina CAREFLOW_SITE_ORIGIN}
+      # Só o nome público e o loopback (sonda de saúde); qualquer outro Host é recusado pelo próprio ASP.NET.
+      AllowedHosts: "${CAREFLOW_DOMAIN};127.0.0.1"
+      Demo__Tokens__Issuer: careflow-demo-hosted
+      Demo__Proxy__KnownNetworks__0: 172.30.0.0/24
+      Demo__SwitchFile: /etc/careflow/demo/demo-switch.json
+      Demo__LedgerPath: /var/lib/careflow-demo/clinicas.json
+      Demo__Slots: "8"
+      Demo__Services__Vault: http://patient-vault:8080/
+      Demo__Services__Consent: http://consent:8080/
+      Demo__Services__Scheduling: http://scheduling:8080/
+      Demo__Services__Notifications: http://notifications:8080/
+      Demo__Services__Audit: http://audit:8080/
+      Demo__Services__Triage: http://triage:8080/
+      Demo__Services__Rights: http://rights:8080/
+      Demo__TempoBaseAddress: http://tempo:3200/
+      Demo__LokiBaseAddress: http://loki:3100/
+    volumes:
+      - ${CAREFLOW_DEMO_DIR:-/etc/careflow/demo}:/etc/careflow/demo:ro
+      - demo-state:/var/lib/careflow-demo
+    networks: [edge, backend]
+    mem_limit: 256m
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dotnet", "CareFlow.Demo.Api.dll", "--health-probe", "http://127.0.0.1:8080/health/live"]
+    depends_on:
+      patient-vault: { condition: service_healthy }
+      consent: { condition: service_healthy }
+      scheduling: { condition: service_healthy }
+      notifications: { condition: service_healthy }
+      audit: { condition: service_healthy }
+      triage: { condition: service_healthy }
+      rights: { condition: service_healthy }
+
+  # Observabilidade enxuta na própria VM (decisão do Cleber, ADR-0013): retenção de 3 dias, nada sai da VM.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    networks: [backend]
+    mem_limit: 256m
+    logging: *logging
+    depends_on: [tempo, loki, prometheus]
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0"
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks: [backend]
+    mem_limit: 512m
+    logging: *logging
+
+  loki:
+    image: grafana/loki:3.5.5
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    networks: [backend]
+    mem_limit: 512m
+    logging: *logging
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-otlp-receiver
+      - --storage.tsdb.retention.time=3d
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [backend]
+    mem_limit: 512m
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+    env_file: ["${CAREFLOW_ENV_DIR:-/etc/careflow/env}/grafana.env"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/careflow-visao-geral.json
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    # Só no loopback da VM: ssh -L 3000:127.0.0.1:3000 ubuntu@<vm> e abra http://localhost:3000.
+    ports: ["127.0.0.1:3000:3000"]
+    networks: [backend, grafana-host]
+    mem_limit: 256m
+    logging: *logging
+    depends_on: [prometheus, tempo, loki]
+
+networks:
+  edge:
+    ipam:
+      config: [{ subnet: 172.30.0.0/24 }]
+  backend:
+    internal: true
+  egress: {}
+  # Rede própria para o Grafana publicar no loopback (rede interna não publica porta).
+  grafana-host: {}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  rabbitmq-data:
+  demo-state:
+  tempo-data:
+  loki-data:
+  prometheus-data:

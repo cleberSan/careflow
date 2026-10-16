@@ -1,0 +1,72 @@
+name: Imagens
+
+# Imagens arm64 dos oito serviços para a VM da Oracle (ADR-0013), num pacote só do GHCR:
+# ghcr.io/clebersan/careflow:<serviço>-<commit>. Em PR só compila (nada é publicado); na main, publica a cada
+# commit, para qualquer commit da main poder ir para o ar (o cache deixa os que não mudam código rápidos).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["src/**", "deploy/docker/**", "eval/triage/recordings/**", "Directory.*.props", "global.json", ".github/workflows/images.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/clebersan/careflow
+
+jobs:
+  image:
+    name: Imagem ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: patient-vault, project: PatientVault }
+          - { name: consent, project: Consent }
+          - { name: scheduling, project: Scheduling }
+          - { name: notifications, project: Notifications }
+          - { name: audit, project: Audit }
+          - { name: triage, project: Triage }
+          - { name: rights, project: Rights }
+          - { name: demo, project: Demo }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Entrar no GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # O SDK compila na arquitetura do runner; só o runtime é arm64, sem emulação (Dockerfile).
+      - name: Compilar${{ github.event_name != 'pull_request' && ' e publicar' || '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/arm64
+          build-args: |
+            SERVICE=${{ matrix.service.project }}
+            REVISION=${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ matrix.service.name }}-${{ github.sha }}
+          push: ${{ github.event_name != 'pull_request' }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}

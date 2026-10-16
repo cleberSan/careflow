@@ -1,0 +1,9 @@
+[Unit]
+Description=Atualiza o IP do subdomínio DuckDNS do CareFlow
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/careflow/duckdns.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/careflow-duckdns update

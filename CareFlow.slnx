@@ -57,6 +57,7 @@
     <Project Path="tests/CareFlow.Rights.UnitTests/CareFlow.Rights.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.SmokeTests/CareFlow.SmokeTests.csproj" />
     <Project Path="tests/CareFlow.Testing/CareFlow.Testing.csproj" />
     <Project Path="tests/CareFlow.Triage.Evaluation/CareFlow.Triage.Evaluation.csproj" />
     <Project Path="tests/CareFlow.Triage.IntegrationTests/CareFlow.Triage.IntegrationTests.csproj" />

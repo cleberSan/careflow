@@ -50,7 +50,18 @@ internal sealed partial class SessionLifecycle(
             }
 
             var clinic = Guid.NewGuid();
-            ledger.Add(new LedgerEntry(clinic, slot, time.GetUtcNow()));
+            try
+            {
+                ledger.Add(new LedgerEntry(clinic, slot, time.GetUtcNow()));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Sem registro não se cria clínica: ela poderia sobrar depois de um reinício. A partição volta já.
+                sessions.ReleaseSlot(slot, TimeSpan.Zero);
+                LogLedgerFailed(logger, exception);
+                throw;
+            }
+
             try
             {
                 var lease = _options.SessionLifetime + _options.CleanupInterval + TimeSpan.FromMinutes(1);
@@ -58,8 +69,8 @@ internal sealed partial class SessionLifecycle(
                 {
                     // Partição ainda com uma clínica de antes (o Demo reiniciou): espera ela vencer no Notifications.
                     // Nada desta clínica chegou a ser criado.
-                    ledger.Remove(clinic);
                     sessions.ReleaseSlot(slot, lease);
+                    ForgetUncreated(clinic);
                     LogSlotBusy(logger, slot);
                     continue;
                 }
@@ -177,6 +188,19 @@ internal sealed partial class SessionLifecycle(
 
     public int PendingCleanups => _pending.Count;
 
+    /// <summary>Clínica que não chegou a existir: se a baixa no registro falhar, ela só vira uma limpeza a mais depois.</summary>
+    private void ForgetUncreated(Guid clinic)
+    {
+        try
+        {
+            ledger.Remove(clinic);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogLedgerFailed(logger, exception);
+        }
+    }
+
     private void Schedule(DemoSession session, TimeSpan delay) =>
         _pending.Enqueue(new PendingCleanup(session, time.GetUtcNow() + delay, 0));
 
@@ -198,9 +222,10 @@ internal sealed partial class SessionLifecycle(
             LogPurged(logger, masked, session.Slot, rows);
             return true;
         }
-        catch (UpstreamException exception)
+        catch (Exception exception) when (exception is UpstreamException or IOException or UnauthorizedAccessException)
         {
-            // A partição continua presa até a limpeza dar certo: nenhuma sessão nova herda dados ou falhas.
+            // A partição continua presa até a limpeza dar certo (inclusive a baixa no registro): nenhuma sessão nova
+            // herda dados ou falhas. Apagar de novo uma clínica já apagada não faz mal.
             activity?.SetStatus(ActivityStatusCode.Error);
             LogPurgeFailed(logger, exception, session.Slot);
             return false;
@@ -220,6 +245,9 @@ internal sealed partial class SessionLifecycle(
 
     [LoggerMessage(EventId = 7006, Level = LogLevel.Warning, Message = "{Count} clínicas de demonstração sobraram de antes do reinício; limpeza agendada")]
     private static partial void LogRecovered(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 7007, Level = LogLevel.Error, Message = "Registro de clínicas do Demo indisponível; sessão recusada")]
+    private static partial void LogLedgerFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(EventId = 7004, Level = LogLevel.Warning, Message = "Limpeza da partição {Slot} falhou; nova tentativa na próxima rodada")]
     private static partial void LogPurgeFailed(ILogger logger, Exception exception, int slot);

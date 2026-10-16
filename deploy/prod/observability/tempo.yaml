@@ -1,0 +1,30 @@
+# Tempo da demonstração hospedada (ADR-0013): monolítico, disco local da VM, traces por 72 horas.
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+  log_level: warn
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+ingester:
+  max_block_duration: 15m
+compactor:
+  compaction:
+    block_retention: 72h
+overrides:
+  defaults:
+    ingestion:
+      rate_limit_bytes: 2000000
+      burst_size_bytes: 4000000
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+usage_report:
+  reporting_enabled: false
