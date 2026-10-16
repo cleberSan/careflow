@@ -46,6 +46,9 @@ public sealed class Notification
 
     public DateTimeOffset? CompletedAt { get; private set; }
 
+    /// <summary>Quando o titular pediu a eliminação. Depois disso o aviso não guarda referência ao provedor.</summary>
+    public DateTimeOffset? ErasedAt { get; private set; }
+
     /// <summary>Controle de concorrência otimista (<c>xmin</c> do PostgreSQL).</summary>
     public uint Version { get; private set; }
 
@@ -103,7 +106,9 @@ public sealed class Notification
 
         Status = NotificationStatus.Sent;
         SentVia = channel;
-        ProviderMessageId = providerMessageId;
+
+        // Envio que terminou depois da eliminação: fica registrado que saiu, sem a referência ao provedor.
+        ProviderMessageId = ErasedAt is null ? providerMessageId : null;
         CompletedAt = now;
         return true;
     }
@@ -120,6 +125,19 @@ public sealed class Notification
     }
 
     public bool MarkFailed(DateTimeOffset now) => Close(NotificationStatus.Failed, now);
+
+    /// <summary>
+    /// Eliminação a pedido do titular: o aviso pendente não sai mais e a referência ao provedor (que leva ao destino
+    /// e ao texto guardados por ele) é apagada. O registro do aviso fica, pelo prazo da política. Idempotente.
+    /// </summary>
+    public SubjectErasure EraseSubject(DateTimeOffset now)
+    {
+        var cancelled = Supersede(now);
+        var referenceErased = ProviderMessageId is not null;
+        ProviderMessageId = null;
+        ErasedAt ??= now;
+        return new SubjectErasure(cancelled, referenceErased);
+    }
 
     private bool Close(NotificationStatus status, DateTimeOffset now)
     {
@@ -163,3 +181,6 @@ public sealed class Notification
         };
     }
 }
+
+/// <summary>O que a eliminação mudou num aviso.</summary>
+public readonly record struct SubjectErasure(bool Cancelled, bool ProviderReferenceErased);

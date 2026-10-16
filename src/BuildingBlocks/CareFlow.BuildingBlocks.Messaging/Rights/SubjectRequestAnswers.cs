@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using CareFlow.BuildingBlocks.Cryptography;
+using CareFlow.BuildingBlocks.Messaging.Consuming;
 using CareFlow.BuildingBlocks.Messaging.Outbox;
 using CareFlow.Contracts.Rights;
 
@@ -33,7 +34,7 @@ public static class SubjectRequestAnswers
         // Sem a chave do pedido não há como entregar sem expor: a mensagem vai para a DLQ em vez de seguir em claro.
         if (!SubjectRequestKinds.IsExport(request.Kind) || string.IsNullOrWhiteSpace(request.RecipientPublicKey))
         {
-            throw new InvalidOperationException("Pedido de exportação sem chave pública do pedido.");
+            throw new PoisonMessageException("Direitos.PedidoSemChave");
         }
 
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(section, SectionJson);

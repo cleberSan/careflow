@@ -77,10 +77,10 @@ public sealed class SubjectRequestTests(VaultApiFixture api)
             Guid.NewGuid(), patientRef, SubjectRequestKinds.Portability, null, RetentionPolicy.Version, DateTimeOffset.UtcNow);
 
         // Act
-        var act = () => api.DeliverAsync(_clinic, opened);
+        var outcome = await api.DeliverAsync(_clinic, opened);
 
-        // Assert: falha, a mensagem volta (e vai para a DLQ); nada entra no Outbox.
-        await Assert.ThrowsAnyAsync<Exception>(act);
+        // Assert: vai para a fila de mensagens mortas; nada entra no Outbox.
+        Assert.Equal(ProcessOutcome.Invalid, outcome);
         var outbox = await api.OutboxAsync(_clinic);
         Assert.DoesNotContain(outbox, row => row.Type == SubjectRequestAnswered.EventType);
     }
