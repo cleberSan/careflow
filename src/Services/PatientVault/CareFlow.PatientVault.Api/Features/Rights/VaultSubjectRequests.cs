@@ -12,20 +12,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CareFlow.PatientVault.Api.Features.Rights;
 
-/// <summary>Seção do cofre no pacote do titular. Só existe decifrada aqui e cifrada para o pedido no evento.</summary>
-internal sealed record VaultSection(
-    Guid PatientRef,
-    string FullName,
-    string Cpf,
-    DateOnly BirthDate,
-    string? Email,
-    string? Phone,
-    DateTimeOffset RegisteredAt,
-    DateTimeOffset UpdatedAt)
-{
-    public override string ToString() => "VaultSection { *** }";
-}
-
 /// <summary>
 /// Resposta do cofre a um pedido do titular (ADR-0012). Acesso e portabilidade: decifra o cadastro e o cifra para o
 /// pedido. Eliminação: destrói a chave do paciente (crypto-shredding), apaga o blind index do CPF e mantém só o

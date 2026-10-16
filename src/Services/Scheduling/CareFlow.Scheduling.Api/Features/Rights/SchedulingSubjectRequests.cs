@@ -12,20 +12,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CareFlow.Scheduling.Api.Features.Rights;
 
-/// <summary>Seção da agenda no pacote do titular: as consultas, sem nada além do pseudônimo.</summary>
-internal sealed record SchedulingSection(IReadOnlyList<SchedulingSection.AppointmentItem> Appointments)
-{
-    internal sealed record AppointmentItem(
-        Guid Id,
-        Guid ProfessionalId,
-        DateTimeOffset StartsAt,
-        DateTimeOffset EndsAt,
-        string Status,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset? CancelledAt,
-        string? CancellationReason);
-}
-
 /// <summary>
 /// Resposta da agenda a um pedido do titular (ADR-0012). Exportação: todas as consultas do paciente. Eliminação:
 /// cancela as futuras (sem aviso ao paciente), mantém as passadas pelo prazo da política e bloqueia novas reservas.

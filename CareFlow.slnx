@@ -28,6 +28,10 @@
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Api/CareFlow.PatientVault.Api.csproj" />
     <Project Path="src/Services/PatientVault/CareFlow.PatientVault.Domain/CareFlow.PatientVault.Domain.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Rights/">
+    <Project Path="src/Services/Rights/CareFlow.Rights.Api/CareFlow.Rights.Api.csproj" />
+    <Project Path="src/Services/Rights/CareFlow.Rights.Domain/CareFlow.Rights.Domain.csproj" />
+  </Folder>
   <Folder Name="/src/Services/Scheduling/">
     <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Api/CareFlow.Scheduling.Api.csproj" />
     <Project Path="src/Services/Scheduling/CareFlow.Scheduling.Domain/CareFlow.Scheduling.Domain.csproj" />
@@ -48,6 +52,8 @@
     <Project Path="tests/CareFlow.Notifications.UnitTests/CareFlow.Notifications.UnitTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.IntegrationTests/CareFlow.PatientVault.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.PatientVault.UnitTests/CareFlow.PatientVault.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.Rights.IntegrationTests/CareFlow.Rights.IntegrationTests.csproj" />
+    <Project Path="tests/CareFlow.Rights.UnitTests/CareFlow.Rights.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Testing/CareFlow.Testing.csproj" />

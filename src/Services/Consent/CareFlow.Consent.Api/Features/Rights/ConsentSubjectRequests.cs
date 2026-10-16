@@ -12,14 +12,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CareFlow.Consent.Api.Features.Rights;
 
-/// <summary>Seção do Consent no pacote do titular: a situação atual de cada finalidade e todo o histórico.</summary>
-internal sealed record ConsentSection(IReadOnlyList<ConsentSection.Current> Consents, IReadOnlyList<ConsentSection.HistoryItem> History)
-{
-    internal sealed record Current(string Purpose, string LegalBasis, string TermVersion, string Status, DateTimeOffset GrantedAt, DateTimeOffset? RevokedAt, long Version);
-
-    internal sealed record HistoryItem(string Purpose, string LegalBasis, string TermVersion, string Change, long Version, DateTimeOffset OccurredAt);
-}
-
 /// <summary>
 /// Resposta do Consent a um pedido do titular (ADR-0012). Exportação: consentimentos e histórico. Eliminação: revoga o
 /// que é revogável (os outros serviços param pelo evento de sempre), recusa concessões futuras ao pseudônimo e
