@@ -3,7 +3,7 @@
     "Coverlet": {
       "includeTestAssembly": true,
       "include": "[CareFlow.SmokeTests]CareFlow.SmokeTests.SmokeTarget,[CareFlow.SmokeTests]CareFlow.SmokeTests.SmokeTarget/*",
-      "excludeAssembliesWithoutSources": "MissingAll"
+      "excludeAssembliesWithoutSources": "None"
     }
   }
 }

@@ -33,15 +33,12 @@ jobs:
           ref: ${{ env.COMMIT }}
           persist-credentials: false
 
-      - uses: docker/setup-buildx-action@v3
-
       - name: Compilar as oito imagens (x64)
         run: |
           for pair in patient-vault:PatientVault consent:Consent scheduling:Scheduling notifications:Notifications \
                       audit:Audit triage:Triage rights:Rights demo:Demo; do
-            docker buildx build --load --quiet \
+            docker build --quiet \
               --build-arg SERVICE="${pair#*:}" --build-arg REVISION="$COMMIT" \
-              --cache-from "type=gha,scope=ci-${pair%%:*}" --cache-to "type=gha,mode=max,scope=ci-${pair%%:*}" \
               -t "$IMAGE:${pair%%:*}-$COMMIT" -f deploy/docker/Dockerfile .
           done
 
@@ -56,9 +53,10 @@ jobs:
           echo "KeyManagement__Local__Keys__ci=$(openssl rand -base64 32)" | sudo tee /etc/careflow/env/ci-keys.env > /dev/null
           sudo chmod 0600 /etc/careflow/env/ci-keys.env
           # Rodar de novo não pode trocar nenhum segredo.
-          before="$(sudo sha256sum /etc/careflow/env/*.env)"
+          # O diretório é do root (0700): o glob precisa ser expandido pelo shell do sudo, não pelo do runner.
+          before="$(sudo bash -c 'sha256sum /etc/careflow/env/*.env')"
           sudo careflow-generate-secrets --vault-endpoint https://ci-crypto.kms.sa-saopaulo-1.oraclecloud.com --key-id ocid1.key.oc1.ci
-          [[ "$before" == "$(sudo sha256sum /etc/careflow/env/*.env)" ]]
+          [[ "$before" == "$(sudo bash -c 'sha256sum /etc/careflow/env/*.env')" ]]
 
       - name: Deploy pelo careflow-deploy (migrations, saúde e registro da versão)
         run: |
@@ -78,6 +76,7 @@ jobs:
       - name: Teste de fumaça pela 443
         run: |
           sudo docker cp careflow-caddy-1:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/caddy-root.crt"
+          sudo chmod 0644 "$RUNNER_TEMP/caddy-root.crt"
           CAREFLOW_SMOKE_URL=https://demo.careflow.test CAREFLOW_SMOKE_ORIGIN=https://site.careflow.test \
           CAREFLOW_SMOKE_CONNECT=127.0.0.1:443 CAREFLOW_SMOKE_CA="$RUNNER_TEMP/caddy-root.crt" \
             dotnet test --project tests/CareFlow.SmokeTests -c Release
@@ -101,7 +100,7 @@ jobs:
           # Um paciente numa clínica fora do Painel, com chave no cofre; o backup sai com ela.
           sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh seed
           sudo CAREFLOW_BACKUP_DIR="$RUNNER_TEMP/backups" careflow-backup --local
-          backup="$(sudo ls -d "$RUNNER_TEMP"/backups/* | tail -n1)"
+          backup="$(sudo bash -c 'ls -d "$1"/backups/* | tail -n1' _ "$RUNNER_TEMP")"
           sudo careflow-restore-drill "$backup"
           # A eliminação acontece depois do backup: restaurar traz a chave de volta e o script precisa reaplicá-la.
           sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh erase
