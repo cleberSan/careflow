@@ -1,4 +1,3 @@
-using CareFlow.BuildingBlocks.AspNetCore.Hosting;
 using CareFlow.Audit.Api.Chain;
 using CareFlow.Audit.Api.Common.Observability;
 using CareFlow.Audit.Api.Common.Security;
@@ -6,6 +5,7 @@ using CareFlow.Audit.Api.Features;
 using CareFlow.Audit.Api.Features.Messaging;
 using CareFlow.Audit.Api.Features.Rights;
 using CareFlow.Audit.Api.Infrastructure.Persistence;
+using CareFlow.BuildingBlocks.AspNetCore.Hosting;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
