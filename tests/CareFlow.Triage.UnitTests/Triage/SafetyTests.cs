@@ -118,6 +118,12 @@ public sealed class ClinicalLanguageGuardTests
     [InlineData("Você tem uma infecção de garganta.", "diagnostico")]
     [InlineData("Quadro compatível com enxaqueca.", "diagnostico")]
     [InlineData("Provavelmente é uma virose.", "diagnostico")]
+    // Frases reais da primeira gravação do Claude Haiku 5.5 que passavam pela versão anterior das regras.
+    [InlineData("Queda facial e fraqueza do braço são sinais compatíveis com um possível AVC.", "diagnostico")]
+    [InlineData("Deformidade visível do punho sugere possível fratura.", "diagnostico")]
+    [InlineData("Sintoma que pode indicar condição cardíaca grave e exige avaliação imediata.", "diagnostico")]
+    [InlineData("Exige avaliação imediata para descartar lesão intracraniana.", "diagnostico")]
+    [InlineData("Pela dúvida entre causa cardíaca e outras, exige avaliação rápida.", "diagnostico")]
     [InlineData("Tome dipirona 500 mg de 6 em 6 horas.", "prescricao")]
     [InlineData("Use um antialérgico até a consulta.", "prescricao")]
     [InlineData("Não é nada grave, fique tranquilo.", "promessa")]
@@ -131,6 +137,8 @@ public sealed class ClinicalLanguageGuardTests
     [InlineData("Dor torácica com irradiação para o braço relatada pelo paciente.")]
     [InlineData("Febre há três dias e tosse, sem sinais de alarme descritos.")]
     [InlineData("Sintomas leves e estáveis segundo o relato.")]
+    [InlineData("Vômitos e diarreia com incapacidade de manter líquidos e fraqueza importante exigem avaliação rápida.")]
+    [InlineData("Dor no peito forte e ainda presente no momento do relato exige avaliação imediata.")]
     public void Inspect_SymptomDescription_IsAllowed(string rationale)
     {
         Assert.Empty(ClinicalLanguageGuard.Inspect(rationale));
