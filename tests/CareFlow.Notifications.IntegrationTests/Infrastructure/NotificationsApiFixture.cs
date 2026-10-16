@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using CareFlow.BuildingBlocks.Messaging.Consuming;
@@ -55,6 +56,9 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
 
     internal FakeContactDirectory Contacts { get; } = new();
 
+    /// <summary>Par de chaves do código de confirmação (o serviço de direitos teria só a pública).</summary>
+    internal ECDiffieHellman VerificationKey { get; } = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+
     internal StubVault Vault { get; } = new();
 
     public string AdminConnectionString =>
@@ -104,6 +108,8 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
             builder.UseSetting("FaultInjection:IsolatedSlots", IsolatedSlots.ToString(CultureInfo.InvariantCulture));
 
             builder.UseSetting("ServiceTokens:Local:PrivateKey", Vault.PrivateKeyBase64);
+            builder.UseSetting("IdentityVerification:PrivateKey", Convert.ToBase64String(VerificationKey.ExportPkcs8PrivateKey()));
+            builder.UseSetting("Demo:SimulatedInboxEnabled", "true");
             builder.ConfigureAppConfiguration(configuration => configuration.Add(_faults));
             builder.ConfigureLogging(logging => logging
                 .AddProvider(Logs)
@@ -259,6 +265,7 @@ public sealed class NotificationsApiFixture : IAsyncLifetime
 
         Logs.Dispose();
         Vault.SigningKey.Dispose();
+        VerificationKey.Dispose();
     }
 
     private WebApplicationFactory<Program> Factory =>

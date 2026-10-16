@@ -34,6 +34,17 @@ internal sealed partial class GrantConsentHandler(
         CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
+
+        // Serializa com a eliminação do mesmo pseudônimo: sem a trava, uma primeira concessão poderia ser gravada
+        // logo depois de a eliminação conferir que não havia nada a revogar.
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var _ = transaction.ConfigureAwait(false);
+        await SubjectLock.AcquireAsync(db, patientRef, cancellationToken).ConfigureAwait(false);
+        if (await db.ErasedSubjects.AnyAsync(e => e.PatientRef == patientRef, cancellationToken).ConfigureAwait(false))
+        {
+            return ConsentErrors.SubjectErased;
+        }
+
         var consent = await db.Consents
             .FirstOrDefaultAsync(c => c.PatientRef == patientRef && c.Purpose == purpose, cancellationToken)
             .ConfigureAwait(false);
@@ -72,6 +83,7 @@ internal sealed partial class GrantConsentHandler(
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)
         {

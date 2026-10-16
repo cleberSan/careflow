@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="xunit.v3" />
+    <!-- Validação do Bundle contra os perfis base do R4 (specification.zip, copiado para a saída): só nos testes (ADR-0012). -->
+    <PackageReference Include="Firely.Fhir.Validation.R4" />
+    <PackageReference Include="Hl7.Fhir.Specification.Data.R4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Services\Rights\CareFlow.Rights.Api\CareFlow.Rights.Api.csproj" />
+  </ItemGroup>
+
+</Project>

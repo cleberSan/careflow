@@ -23,7 +23,7 @@ Os outros serviços do CareFlow (agenda, triagem, notificações) não precisam 
 - **Cifragem transparente do disco ou do banco (TDE):** protege o disco, mas qualquer um com acesso SQL lê tudo em claro, e não permite apagar uma clínica por chave.
 - **`pgcrypto` no banco:** a chave teria de trafegar até o PostgreSQL em cada consulta e apareceria em logs de statement.
 - **Um único blob JSON cifrado por paciente:** menos colunas, mas cada alteração recifra tudo e perde a possibilidade de revelar campos de forma seletiva (por exemplo, só o telefone para notificações).
-- **DEK por paciente (três níveis de chave):** permite crypto-shredding de um único paciente. Fica para a fase 8 (direitos do titular): o esquema já guarda `key_version` por linha, então uma DEK por paciente cifrada pela chave da clínica entra sem migração destrutiva.
+- **DEK por paciente (três níveis de chave):** permite crypto-shredding de um único paciente. Ficou para a fase 8 e entrou lá (ADR-0012), sem migração destrutiva: o cofre lê os dois esquemas e migra em lotes.
 - **Hash simples (SHA-256) do CPF no lugar do HMAC:** o espaço de CPFs é pequeno (cerca de 10^9), então um hash sem chave é revertido por força bruta em minutos.
 
 ## Consequências
@@ -32,5 +32,6 @@ Os outros serviços do CareFlow (agenda, triagem, notificações) não precisam 
 - O tamanho do valor cifrado revela o tamanho do valor original (por exemplo, o comprimento do nome). Aceito nesta fase; padding por faixas é a mitigação se virar requisito.
 - Busca só por igualdade exata de CPF. Busca por nome ou parcial exigiria outra técnica e não faz parte do escopo.
 - Rotação da KEK é só configuração (nova chave ativa; as antigas continuam decifrando). Rotação da DEK e a reescrita dos registros ficam para a fase 8, junto do crypto-shredding.
+  - **Atualização (fase 8, ADR-0012):** cada paciente tem a própria DEK, embrulhada pela chave da clínica. A chave da clínica rotaciona por rota própria (`vault.keys`), a manutenção reembrulha e recifra em lotes com o cofre no ar, e versões antigas são destruídas quando nada depende delas.
 - O `patient_ref` pode aparecer no caminho da URL nos logs de requisição do ASP.NET Core e nos traces. Esses logs ficam desligados em produção (nível Warning) e o pseudônimo, sozinho, não identifica ninguém.
 - A agenda continua aceitando qualquer `patientRef` da clínica. Validar a existência do paciente entra na fase 4, por eventos, para não acoplar a disponibilidade da agenda à do cofre.

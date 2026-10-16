@@ -18,6 +18,8 @@ internal sealed class PatientRecordConfiguration : IEntityTypeConfiguration<Pati
         builder.Property(p => p.PatientRef).HasColumnName("patient_ref").ValueGeneratedNever();
         builder.Property(p => p.TenantId).HasColumnName("tenant_id");
         builder.Property(p => p.KeyVersion).HasColumnName("key_version");
+        builder.Property(p => p.KeyScheme).HasColumnName("key_scheme").HasConversion<short>();
+        builder.Property(p => p.ErasedAt).HasColumnName("erased_at");
         builder.Property(p => p.FullName).HasColumnName("full_name_enc");
         builder.Property(p => p.Cpf).HasColumnName("cpf_enc");
         builder.Property(p => p.BirthDate).HasColumnName("birth_date_enc");
@@ -27,6 +29,7 @@ internal sealed class PatientRecordConfiguration : IEntityTypeConfiguration<Pati
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         builder.Property(p => p.RowVersion).IsRowVersion();
+        builder.Ignore(p => p.IsErased);
 
         builder.HasIndex(p => new { p.TenantId, p.CpfIndex }).IsUnique().HasDatabaseName(CpfIndexConstraint);
     }

@@ -38,6 +38,9 @@ public sealed record Error
     /// <summary>A operação exige uma pré-condição (If-Match) que o cliente não enviou.</summary>
     public static Error PreconditionRequired(string code, string message) => Create(code, message, ErrorType.PreconditionRequired);
 
+    /// <summary>O recurso existiu e foi eliminado; não volta.</summary>
+    public static Error Gone(string code, string message) => Create(code, message, ErrorType.Gone);
+
     private static Error Create(string code, string message, ErrorType type)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);

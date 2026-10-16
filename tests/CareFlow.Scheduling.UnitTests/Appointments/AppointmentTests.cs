@@ -284,4 +284,33 @@ public sealed class AppointmentTests
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
         Assert.Null(appointment.CancellationReason);
     }
+
+    [Fact]
+    public void CancelForSubjectErasure_FutureAppointment_RecordsSubjectErasureReason()
+    {
+        // Arrange
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Act
+        var result = appointment.CancelForSubjectErasure(Now);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AppointmentStatus.Cancelled, appointment.Status);
+        Assert.Equal(CancellationReason.SubjectErasure, appointment.CancellationReason);
+    }
+
+    [Fact]
+    public void CancelForSubjectErasure_StartedAppointment_IsKept()
+    {
+        // Arrange
+        var appointment = Appointment.Book(Request(), Policy, Now).Value;
+
+        // Act
+        var result = appointment.CancelForSubjectErasure(Tomorrow9h.AddMinutes(5));
+
+        // Assert
+        Assert.Equal(AppointmentErrors.AlreadyStarted, result.Error);
+        Assert.Equal(AppointmentStatus.Booked, appointment.Status);
+    }
 }

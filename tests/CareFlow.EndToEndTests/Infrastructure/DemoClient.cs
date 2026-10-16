@@ -107,6 +107,38 @@ internal sealed class DemoClient : IDisposable
         return (await response.Content.ReadFromJsonAsync<ChannelsView>(Ct))!;
     }
 
+    public async Task<RightsRequestView> OpenRightsRequestAsync(string kind)
+    {
+        var response = await _http.PostAsJsonAsync("demo/v1/rights/requests", new RightsRequestBody(kind), Ct);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Pedido pelo Demo: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<RightsRequestView>(Ct))!;
+    }
+
+    public Task<RightsRequestView> RightsRequestAsync(Guid id) => GetAsync<RightsRequestView>($"demo/v1/rights/requests/{id}");
+
+    public Task<HttpResponseMessage> RightsRequestRawAsync(Guid id) => _http.GetAsync($"demo/v1/rights/requests/{id}", Ct);
+
+    public Task<InboxMessageView[]> InboxAsync(Guid id) => GetAsync<InboxMessageView[]>($"demo/v1/rights/requests/{id}/inbox");
+
+    public Task<HttpResponseMessage> ConfirmIdentityRawAsync(Guid id, string? code) =>
+        _http.PostAsJsonAsync($"demo/v1/rights/requests/{id}/identity", new IdentityCodeBody(code), Ct);
+
+    public async Task<RightsRequestView> ConfirmIdentityAsync(Guid id, string code)
+    {
+        var response = await ConfirmIdentityRawAsync(id, code);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Confirmação pelo Demo: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<RightsRequestView>(Ct))!;
+    }
+
+    public async Task<PackageContentsView> PackageAsync(Guid id)
+    {
+        var response = await _http.PostAsync($"demo/v1/rights/requests/{id}/package", null, Ct);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Pacote pelo Demo: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<PackageContentsView>(Ct))!;
+    }
+
+    public Task<ErasureEvidenceView> ErasureEvidenceAsync() => GetAsync<ErasureEvidenceView>("demo/v1/rights/erasure-evidence");
+
     public Task<HttpResponseMessage> TraceRawAsync(string traceId) => _http.GetAsync($"demo/v1/traces/{traceId}", Ct);
 
     public Task<TraceView> TraceAsync(string traceId) => GetAsync<TraceView>($"demo/v1/traces/{traceId}");

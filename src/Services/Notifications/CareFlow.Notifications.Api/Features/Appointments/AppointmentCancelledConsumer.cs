@@ -21,10 +21,13 @@ internal sealed class AppointmentCancelledConsumer(NotificationsDbContext db, Ti
         ArgumentNullException.ThrowIfNull(@event);
         ArgumentNullException.ThrowIfNull(context);
 
-        var cause = @event.Reason switch
+        // Eliminação a pedido do titular: os avisos pendentes caem e nenhum aviso de cancelamento sai, porque o
+        // contato do paciente deixa de existir no cofre.
+        CancellationCause? cause = @event.Reason switch
         {
             AppointmentCancellationReasons.Requested => CancellationCause.Requested,
             AppointmentCancellationReasons.ConsentRevoked => CancellationCause.ConsentRevoked,
+            AppointmentCancellationReasons.SubjectErasure => null,
             _ => throw new PoisonMessageException("Notificacoes.MotivoDeCancelamentoDesconhecido"),
         };
 
@@ -52,10 +55,10 @@ internal sealed class AppointmentCancelledConsumer(NotificationsDbContext db, Ti
             await db.Jobs.Where(j => ids.Contains(j.NotificationId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        if (appointment.StartsAt > now)
+        if (cause is not null && appointment.StartsAt > now)
         {
             db.Schedule(
-                Notification.Cancellation(context.TenantId, appointment.AppointmentId, appointment.PatientRef, appointment.StartsAt, cause, now),
+                Notification.Cancellation(context.TenantId, appointment.AppointmentId, appointment.PatientRef, appointment.StartsAt, cause.Value, now),
                 metrics);
         }
     }

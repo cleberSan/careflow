@@ -98,6 +98,30 @@
           "Docker.DotNet.Enhanced.Handler.Abstractions": "4.3.3"
         }
       },
+      "Fhir.Metrics": {
+        "type": "Transitive",
+        "resolved": "1.4.0",
+        "contentHash": "SxpoHR46khpzQG4rOX+rJduPeuH3h9rEpEoguraOft24E0tMnnDk8CuTMVF3fMudsdyo5addKBf+wGngWHwgOQ=="
+      },
+      "Hl7.Fhir.Base": {
+        "type": "Transitive",
+        "resolved": "6.7.0",
+        "contentHash": "6TYs6hBnrQdfjivQL2dc/TFVbR9P9QklPgOiC85iZCT+aJ+/d416VoU4Yrt3TklO1gMXjjImveypWES34koZqQ==",
+        "dependencies": {
+          "Fhir.Metrics": "1.4.0",
+          "Microsoft.Extensions.Caching.Memory": "10.0.9",
+          "Newtonsoft.Json": "13.0.4",
+          "System.ComponentModel.Annotations": "5.0.0"
+        }
+      },
+      "Hl7.Fhir.Conformance": {
+        "type": "Transitive",
+        "resolved": "6.7.0",
+        "contentHash": "HXlrbVcMlwuOmUWxH1j1uNNf0Qs3E4KCbtJrysKoL2ksdvWalnqeN/GC2+VUFXipPUfNCula5fQ8LKMioDlNag==",
+        "dependencies": {
+          "Hl7.Fhir.Base": "6.7.0"
+        }
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -661,6 +685,11 @@
         "resolved": "5.0.0",
         "contentHash": "dDoKi0PnDz31yAyETfRntsLArTlVAVzUzCIvvEDsDsucrl33Dl8pIJG06ePTJTI3tGpeyHS9Cq7Foc/s4EeKcg=="
       },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
       "OpenTelemetry": {
         "type": "Transitive",
         "resolved": "1.19.1",
@@ -723,6 +752,11 @@
           "BouncyCastle.Cryptography": "2.7.0",
           "Microsoft.Extensions.Logging.Abstractions": "8.0.3"
         }
+      },
+      "System.ComponentModel.Annotations": {
+        "type": "Transitive",
+        "resolved": "5.0.0",
+        "contentHash": "dMkqfy2el8A8/I76n2Hi1oBFEbG1SfxD2l5nhwXV3XjlnOmwxJlQbYpJH4W51odnU9sARCSAgv7S3CyAFMkpYg=="
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
@@ -938,6 +972,24 @@
           "CareFlow.BuildingBlocks": "[1.0.0, )"
         }
       },
+      "careflow.rights.api": {
+        "type": "Project",
+        "dependencies": {
+          "CareFlow.BuildingBlocks.AspNetCore": "[1.0.0, )",
+          "CareFlow.BuildingBlocks.Messaging": "[1.0.0, )",
+          "CareFlow.BuildingBlocks.Persistence": "[1.0.0, )",
+          "CareFlow.Rights.Domain": "[1.0.0, )",
+          "Hl7.Fhir.R4": "[6.7.0, )",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
+          "Microsoft.AspNetCore.OpenApi": "[10.0.13, )"
+        }
+      },
+      "careflow.rights.domain": {
+        "type": "Project",
+        "dependencies": {
+          "CareFlow.BuildingBlocks": "[1.0.0, )"
+        }
+      },
       "careflow.scheduling.api": {
         "type": "Project",
         "dependencies": {
@@ -989,6 +1041,15 @@
         "contentHash": "Q1kBW0WirUdgFzz71/e0D4E+FYP38TLU2Kn6S9/9hzgmvfx/BkoaAZED7xxzOjta97XGIxeB+g55klkxzpIc+g==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "10.5.1"
+        }
+      },
+      "Hl7.Fhir.R4": {
+        "type": "CentralTransitive",
+        "requested": "[6.7.0, )",
+        "resolved": "6.7.0",
+        "contentHash": "LN9YLVQUaryQaGU019xWbuxgah1hcJ/ky8ZBDbXs5RoNgQZe5BPeCJtQ0jWrCJ/ur0WWpshk4AioakjHelnhiQ==",
+        "dependencies": {
+          "Hl7.Fhir.Conformance": "6.7.0"
         }
       },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {

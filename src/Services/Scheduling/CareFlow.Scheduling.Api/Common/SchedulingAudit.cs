@@ -8,4 +8,7 @@ internal static class SchedulingAudit
 
     /// <summary>Ator das ações automáticas da agenda (cancelamento por revogação).</summary>
     public const string SystemActor = "careflow-scheduling";
+
+    /// <summary>Ator das ações feitas em resposta a um pedido do titular.</summary>
+    public const string RightsActor = "careflow-rights";
 }

@@ -159,4 +159,37 @@ public sealed class PatientStatusTests
         Assert.True(status.IsRegistered);
         Assert.Equal(first, status.UpdatedAt);
     }
+
+    [Fact]
+    public void MarkErased_BlocksBooking_EvenWithConsentGrantedLater()
+    {
+        // Arrange
+        var status = NewStatus();
+        status.MarkRegistered(Now);
+        status.ApplyConsentGranted(1, Now);
+
+        // Act
+        var first = status.MarkErased(Now.AddMinutes(1));
+        status.ApplyConsentGranted(2, Now.AddMinutes(2));
+
+        // Assert
+        Assert.True(first);
+        Assert.True(status.IsErased);
+        Assert.Equal(PatientErrors.Erased, status.EnsureCanBook().Error);
+    }
+
+    [Fact]
+    public void MarkErased_Twice_KeepsTheOriginalDate()
+    {
+        // Arrange
+        var status = NewStatus();
+        status.MarkErased(Now);
+
+        // Act
+        var second = status.MarkErased(Now.AddDays(1));
+
+        // Assert
+        Assert.False(second);
+        Assert.Equal(Now, status.ErasedAt);
+    }
 }

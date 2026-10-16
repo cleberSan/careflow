@@ -424,6 +424,10 @@ namespace CareFlow.Notifications.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_at");
 
+                    b.Property<DateTimeOffset?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -484,7 +488,7 @@ namespace CareFlow.Notifications.Api.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_notifications_rounds", "rounds >= 0");
 
-                            t.HasCheckConstraint("ck_notifications_sent", "status <> 'Sent' OR (sent_via IS NOT NULL AND provider_message_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_notifications_sent", "status <> 'Sent' OR (sent_via IS NOT NULL AND (provider_message_id IS NOT NULL OR erased_at IS NOT NULL))");
 
                             t.HasCheckConstraint("ck_notifications_status", "status IN ('Pending', 'Sent', 'NotSent', 'Superseded', 'Expired', 'Failed')");
                         });

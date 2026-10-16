@@ -27,6 +27,7 @@ internal static class AppointmentEvents
     {
         CancellationReason.ConsentRevoked => AppointmentCancellationReasons.ConsentRevoked,
         CancellationReason.Requested => AppointmentCancellationReasons.Requested,
+        CancellationReason.SubjectErasure => AppointmentCancellationReasons.SubjectErasure,
         _ => throw new InvalidOperationException("Consulta cancelada sem motivo registrado."),
     };
 }

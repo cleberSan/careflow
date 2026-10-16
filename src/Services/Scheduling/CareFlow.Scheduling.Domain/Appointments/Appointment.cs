@@ -101,6 +101,12 @@ public sealed class Appointment
     /// </summary>
     public Result CancelForConsentRevocation(DateTimeOffset now) => Cancel(now, Appointments.CancellationReason.ConsentRevoked);
 
+    /// <summary>
+    /// Cancela porque o titular pediu a eliminação dos dados. Mesma regra da revogação: só consultas futuras e ativas;
+    /// as passadas ficam, só com o pseudônimo, pelo prazo da política de retenção.
+    /// </summary>
+    public Result CancelForSubjectErasure(DateTimeOffset now) => Cancel(now, Appointments.CancellationReason.SubjectErasure);
+
     private Result Cancel(DateTimeOffset now, CancellationReason reason)
     {
         if (Status == AppointmentStatus.Cancelled)

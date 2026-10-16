@@ -7,6 +7,7 @@ using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Contracts.Appointments;
 using CareFlow.Contracts.Consents;
+using CareFlow.Contracts.Rights;
 using CareFlow.Notifications.Api.Channels;
 using CareFlow.Notifications.Api.Channels.Resilience;
 using CareFlow.Notifications.Api.Common.Observability;
@@ -16,6 +17,7 @@ using CareFlow.Notifications.Api.Delivery;
 using CareFlow.Notifications.Api.Features;
 using CareFlow.Notifications.Api.Features.Appointments;
 using CareFlow.Notifications.Api.Features.Consents;
+using CareFlow.Notifications.Api.Features.Rights;
 using CareFlow.Notifications.Api.Infrastructure;
 using CareFlow.Notifications.Api.Infrastructure.Persistence;
 
@@ -60,13 +62,27 @@ builder.Services
         .Handle<AppointmentBooked, AppointmentBookedConsumer>()
         .Handle<AppointmentCancelled, AppointmentCancelledConsumer>()
         .Handle<ConsentGranted, ConsentGrantedConsumer>()
-        .Handle<ConsentRevoked, ConsentRevokedConsumer>());
+        .Handle<ConsentRevoked, ConsentRevokedConsumer>()
+        .Handle<IdentityVerificationRequested, IdentityVerificationRequestedConsumer>()
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>()
+        .Handle<ErasureReapplied, ErasureReappliedConsumer>());
+
+// Pedidos do titular (ADR-0012): a chave que abre o código de confirmação e o que cada pedido apaga.
+builder.Services.AddOptions<IdentityVerificationOptions>()
+    .BindConfiguration(IdentityVerificationOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<VerificationCodeKey>();
+builder.Services.AddScoped<NotificationsEraser>();
 
 builder.Services.AddNotificationChannels();
 builder.Services.AddContactDirectory(builder.Environment);
 builder.Services.AddNotificationDelivery(builder.Configuration);
 
 var app = builder.Build();
+
+// Chave inválida derruba a subida, em vez de mandar cada pedido para a fila de mensagens mortas.
+_ = app.Services.GetRequiredService<VerificationCodeKey>();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
@@ -105,6 +121,7 @@ app.MapHealthChecks("/health/channels", new HealthCheckOptions
 app.MapNotificationEndpoints();
 
 app.MapDemoPurgeIfEnabled(DatabaseExtensions.ConnectionStringName, AuthorizationPolicies.DemoPurge);
+app.MapSimulatedInboxIfEnabled(AuthorizationPolicies.DemoInbox);
 
 await app.MigrateIfEnabledAsync().ConfigureAwait(false);
 await app.RunAsync().ConfigureAwait(false);

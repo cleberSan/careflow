@@ -25,6 +25,9 @@ public static class PatientErrors
     public static readonly Error NotFound = Error.NotFound(
         "Paciente.NaoEncontrado", "Paciente não encontrado.");
 
+    public static readonly Error Erased = Error.Gone(
+        "Paciente.Eliminado", "Os dados deste paciente foram eliminados a pedido do titular e não podem mais ser lidos.");
+
     public static readonly Error DuplicateCpf = Error.Conflict(
         "Paciente.CpfJaCadastrado", "Já existe um paciente com este CPF nesta clínica.");
 

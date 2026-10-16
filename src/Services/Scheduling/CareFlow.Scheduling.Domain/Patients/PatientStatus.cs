@@ -28,6 +28,11 @@ public sealed class PatientStatus
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>Quando o titular pediu a eliminação. Definitivo: nenhum evento posterior desfaz.</summary>
+    public DateTimeOffset? ErasedAt { get; private set; }
+
+    public bool IsErased => ErasedAt is not null;
+
     public static PatientStatus Track(Guid tenantId, Guid patientRef, DateTimeOffset now)
     {
         if (tenantId == Guid.Empty || patientRef == Guid.Empty)
@@ -53,9 +58,27 @@ public sealed class PatientStatus
     /// <summary>Aplica uma revogação. Devolve <c>false</c> se a versão não for nova (ignorada).</summary>
     public bool ApplyConsentRevoked(long version, DateTimeOffset now) => Apply(SchedulingConsent.Revoked, version, now);
 
-    /// <summary>Pode reservar? Só paciente cadastrado e com base legal ativa para agendamento.</summary>
+    /// <summary>Marca a eliminação. Devolve <c>false</c> se já estava eliminado (a data original fica).</summary>
+    public bool MarkErased(DateTimeOffset now)
+    {
+        if (IsErased)
+        {
+            return false;
+        }
+
+        ErasedAt = now;
+        UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>Pode reservar? Só paciente cadastrado, não eliminado e com base legal ativa para agendamento.</summary>
     public Result EnsureCanBook()
     {
+        if (IsErased)
+        {
+            return Result.Failure(PatientErrors.Erased);
+        }
+
         if (!IsRegistered)
         {
             return Result.Failure(PatientErrors.NotYetKnown);

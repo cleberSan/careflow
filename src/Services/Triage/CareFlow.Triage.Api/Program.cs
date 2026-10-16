@@ -5,9 +5,11 @@ using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.BuildingBlocks.Persistence.Demo;
 using CareFlow.Contracts.Consents;
+using CareFlow.Contracts.Rights;
 using CareFlow.Triage.Api.Common.Observability;
 using CareFlow.Triage.Api.Common.Security;
 using CareFlow.Triage.Api.Features.Consents;
+using CareFlow.Triage.Api.Features.Rights;
 using CareFlow.Triage.Api.Features.Triages;
 using CareFlow.Triage.Api.Infrastructure.Persistence;
 using CareFlow.Triage.Api.Models;
@@ -46,7 +48,10 @@ builder.Services
     .AddOutbox()
     .AddConsumer<TriageDbContext>(consumers => consumers
         .Handle<ConsentGranted, ConsentGrantedConsumer>()
-        .Handle<ConsentRevoked, ConsentRevokedConsumer>());
+        .Handle<ConsentRevoked, ConsentRevokedConsumer>()
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>()
+        .Handle<ErasureReapplied, ErasureReappliedConsumer>());
+builder.Services.AddScoped<TriageEraser>();
 
 builder.Services.AddTriageModel(builder.Configuration);
 builder.Services.AddTriageProfiles(builder.Environment);

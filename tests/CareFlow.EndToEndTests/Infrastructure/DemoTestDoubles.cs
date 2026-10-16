@@ -16,6 +16,13 @@ internal sealed class TestHeadersAuthenticator : IServiceAuthenticator
     {
         request.Headers.Remove(TestAuthHandler.TenantHeader);
         request.Headers.Remove(TestAuthHandler.ScopesHeader);
+
+        // Chamada anônima (o download pelo link): sai sem identidade, como no Demo de verdade.
+        if (call.Scopes.Count == 0)
+        {
+            return;
+        }
+
         request.Headers.Add(TestAuthHandler.TenantHeader, call.Clinic.ToString());
         request.Headers.Add(TestAuthHandler.ScopesHeader, string.Join(' ', call.Scopes));
     }

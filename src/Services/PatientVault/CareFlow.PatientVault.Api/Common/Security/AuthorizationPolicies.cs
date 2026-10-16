@@ -12,11 +12,13 @@ internal static class AuthorizationPolicies
     public const string WriteScope = "vault.write";
     public const string ContactReadScope = "vault.contact.read";
     public const string TriageProfileReadScope = "vault.triage-profile.read";
+    public const string KeysScope = "vault.keys";
 
     public const string Read = "Vault.Read";
     public const string Write = "Vault.Write";
     public const string ContactRead = "Vault.ContactRead";
     public const string TriageProfileRead = "Vault.TriageProfileRead";
+    public const string Keys = "Vault.Keys";
 
     // Só existe no ambiente de demonstração (Demo:PurgeEnabled): o serviço Demo apaga a clínica sintética da sessão.
     public const string DemoPurge = "Demo.Purge";
@@ -28,6 +30,8 @@ internal static class AuthorizationPolicies
             .AddTenantScopePolicy(DemoPurge, DemoPurgeEndpoint.Scope)
             .AddTenantScopePolicy(Read, ReadScope)
             .AddTenantScopePolicy(Write, WriteScope)
+            // Rotação e destruição de chaves: operação de quem administra a clínica, sem acesso a dado pessoal.
+            .AddTenantScopePolicy(Keys, KeysScope)
             // Contato e perfil de triagem são o mínimo de cada serviço, com escopo próprio: quem só envia avisos
             // não lê o cadastro inteiro, e a triagem não lê contato. São as únicas políticas que aceitam o token
             // de serviço interno.

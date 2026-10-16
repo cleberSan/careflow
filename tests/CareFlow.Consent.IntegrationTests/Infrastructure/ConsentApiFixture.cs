@@ -1,10 +1,16 @@
+using System.Text.Json;
+
+using CareFlow.BuildingBlocks.Messaging.Consuming;
+using CareFlow.BuildingBlocks.Messaging.Inbox;
 using CareFlow.Consent.Api.Infrastructure.Persistence;
 using CareFlow.Consent.IntegrationTests.Infrastructure;
+using CareFlow.Contracts;
 using CareFlow.Testing;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 [assembly: AssemblyFixture(typeof(ConsentApiFixture))]
@@ -69,6 +75,20 @@ public sealed class ConsentApiFixture : IAsyncLifetime
     }
 
     public HttpClient CreateAnonymousClient() => Factory.CreateClient();
+
+    /// <summary>Entrega um evento pelo processador do Inbox, como faria o consumidor do RabbitMQ.</summary>
+    public async Task<ProcessOutcome> DeliverAsync<TEvent>(Guid tenantId, TEvent @event, Guid? messageId = null)
+        where TEvent : IIntegrationEvent
+    {
+        var processor = Factory.Services.GetRequiredService<InboxProcessor<ConsentDbContext>>();
+        var body = JsonSerializer.SerializeToUtf8Bytes(@event, JsonSerializerOptions.Web);
+        var context = new MessageContext(messageId ?? Guid.CreateVersion7(), tenantId, TEvent.EventType, DateTimeOffset.UtcNow);
+        return await processor.ProcessAsync(context, body, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Eventos no Outbox da clínica, em ordem de criação (lido como admin).</summary>
+    public Task<IReadOnlyList<OutboxRow>> TenantOutboxAsync(Guid tenantId) =>
+        OutboxRows.ReadAsync(AdminConnectionString, tenantId, TestContext.Current.CancellationToken);
 
     public async ValueTask DisposeAsync()
     {

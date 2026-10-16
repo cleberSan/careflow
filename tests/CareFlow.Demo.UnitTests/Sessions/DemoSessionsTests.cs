@@ -192,4 +192,26 @@ public sealed class DemoSessionTests
         Assert.Equal([appointment], snapshot);
         Assert.Equal(2, session.Appointments.Count);
     }
+    [Fact]
+    public void RightsRequests_CountUpToTheLimit_AndAreOwnedOnlyAfterBeingAdded()
+    {
+        // Arrange
+        var session = new DemoSession("id", Guid.NewGuid(), 1, DateTimeOffset.UnixEpoch, DateTimeOffset.MaxValue);
+        var request = Guid.NewGuid();
+
+        // Act
+        var first = session.TryReserveRightsRequest(2);
+        var second = session.TryReserveRightsRequest(2);
+        var third = session.TryReserveRightsRequest(2);
+        var ownedBefore = session.OwnsRightsRequest(request);
+        session.AddRightsRequest(request);
+
+        // Assert
+        Assert.True(first);
+        Assert.True(second);
+        Assert.False(third);
+        Assert.False(ownedBefore);
+        Assert.True(session.OwnsRightsRequest(request));
+        Assert.False(session.OwnsRightsRequest(Guid.NewGuid()));
+    }
 }

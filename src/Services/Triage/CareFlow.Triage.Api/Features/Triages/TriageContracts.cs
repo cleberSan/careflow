@@ -21,7 +21,7 @@ public sealed record ReviewTriageRequest(string? Decision, string? Priority);
 public sealed record TriageResponse(
     Guid Id,
     Guid PatientRef,
-    string Complaint,
+    string? Complaint,
     string AgeBand,
     string? SentToModel,
     string? PromptDigest,

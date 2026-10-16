@@ -16,4 +16,9 @@ public static class PatientErrors
     public static readonly Error NoLegalBasis = Error.Conflict(
         "Agenda.PacienteSemBaseLegal",
         "O paciente não tem consentimento ou outra base legal ativa para agendamento.");
+
+    /// <summary>O titular pediu a eliminação: o pseudônimo não agenda mais nada.</summary>
+    public static readonly Error Erased = Error.Conflict(
+        "Agenda.PacienteEliminado",
+        "Os dados deste paciente foram eliminados a pedido do titular. Um novo cadastro gera outro pseudônimo.");
 }

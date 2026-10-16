@@ -3,11 +3,13 @@ using CareFlow.Audit.Api.Common.Observability;
 using CareFlow.Audit.Api.Common.Security;
 using CareFlow.Audit.Api.Features;
 using CareFlow.Audit.Api.Features.Messaging;
+using CareFlow.Audit.Api.Features.Rights;
 using CareFlow.Audit.Api.Infrastructure.Persistence;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
 using CareFlow.Contracts.Auditing;
+using CareFlow.Contracts.Rights;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -41,12 +43,15 @@ builder.Services.AddAuditDatabase(builder.Configuration);
 
 builder.Services.AddAuditFeatures();
 
-// A auditoria só consome: grava na cadeia os acessos que os outros serviços publicam.
+// A auditoria grava na cadeia os acessos que os outros serviços publicam e responde aos pedidos do titular
+// (o único evento que ela publica, pelo Outbox).
 builder.Services
     .AddCareFlowMessaging(builder.Configuration, DatabaseExtensions.RelayConnectionStringName)
+    .AddOutbox()
     .AddConsumer<AuditDbContext>(consumers => consumers
         .Handle<DataAccessRecorded, DataAccessRecordedConsumer>()
-        .Handle<ContentDisclosed, ContentDisclosedConsumer>());
+        .Handle<ContentDisclosed, ContentDisclosedConsumer>()
+        .Handle<SubjectRequestOpened, SubjectRequestOpenedConsumer>());
 
 var app = builder.Build();
 

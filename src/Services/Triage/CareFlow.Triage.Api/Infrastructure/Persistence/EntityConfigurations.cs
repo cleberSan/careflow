@@ -18,13 +18,15 @@ internal sealed class TriageCaseConfiguration : IEntityTypeConfiguration<TriageC
     {
         builder.ToTable(TableName, table =>
         {
-            table.HasCheckConstraint("ck_triage_cases_complaint", $"char_length(complaint) BETWEEN {TriageCase.MinComplaintLength} AND {TriageEngine.MaxComplaintLength}");
+            table.HasCheckConstraint(
+                "ck_triage_cases_complaint",
+                $"(complaint IS NULL AND erased_at IS NOT NULL) OR char_length(complaint) BETWEEN {TriageCase.MinComplaintLength} AND {TriageEngine.MaxComplaintLength}");
             table.HasCheckConstraint("ck_triage_cases_model_status", $"model_status IN ({InList<ModelStatus>()})");
             table.HasCheckConstraint("ck_triage_cases_source", $"source IN ({InList<SuggestionSource>()})");
             table.HasCheckConstraint("ck_triage_cases_decision", $"decision IN ({InList<ReviewDecision>()})");
             table.HasCheckConstraint("ck_triage_cases_priorities", "suggested_priority BETWEEN 1 AND 4 AND model_priority BETWEEN 1 AND 4 AND final_priority BETWEEN 1 AND 4");
             // O que foi enviado tem sempre o digest, e o digest só existe se algo foi enviado.
-            table.HasCheckConstraint("ck_triage_cases_sent", "(sent_to_model IS NULL) = (prompt_digest IS NULL)");
+            table.HasCheckConstraint("ck_triage_cases_sent", "(sent_to_model IS NULL) = (prompt_digest IS NULL) OR erased_at IS NOT NULL");
             // Revisada tem prioridade final, revisor e horário; pendente não tem nenhum dos três.
             table.HasCheckConstraint("ck_triage_cases_review", "(decision = 'Pending') = (final_priority IS NULL AND reviewed_by IS NULL AND reviewed_at IS NULL)");
         });
@@ -55,6 +57,7 @@ internal sealed class TriageCaseConfiguration : IEntityTypeConfiguration<TriageC
                     value => value.Aggregate(0, (hash, pair) => HashCode.Combine(hash, pair.Key, pair.Value)),
                     value => new Dictionary<string, int>(value)));
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
+        builder.Property(c => c.ErasedAt).HasColumnName("erased_at");
         builder.Property(c => c.Decision).HasColumnName("decision").HasConversion<string>().HasMaxLength(16);
         builder.Property(c => c.FinalPriority).HasColumnName("final_priority");
         builder.Property(c => c.ReviewedBy).HasColumnName("reviewed_by").HasMaxLength(TriageCase.MaxReviewerLength);

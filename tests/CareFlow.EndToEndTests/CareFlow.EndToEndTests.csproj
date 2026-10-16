@@ -16,7 +16,7 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <!-- Cada API tem a sua classe Program no namespace global; os aliases separam as sete. -->
+  <!-- Cada API tem a sua classe Program no namespace global; os aliases separam as oito. -->
   <ItemGroup>
     <ProjectReference Include="..\CareFlow.Testing\CareFlow.Testing.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\CareFlow.BuildingBlocks.Messaging\CareFlow.BuildingBlocks.Messaging.csproj" />
@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\Services\Audit\CareFlow.Audit.Api\CareFlow.Audit.Api.csproj" Aliases="audit" />
     <ProjectReference Include="..\..\src\Services\Notifications\CareFlow.Notifications.Api\CareFlow.Notifications.Api.csproj" Aliases="notifications" />
     <ProjectReference Include="..\..\src\Services\Triage\CareFlow.Triage.Api\CareFlow.Triage.Api.csproj" Aliases="triage" />
+    <ProjectReference Include="..\..\src\Services\Rights\CareFlow.Rights.Api\CareFlow.Rights.Api.csproj" Aliases="rights" />
     <ProjectReference Include="..\..\src\Services\Demo\CareFlow.Demo.Api\CareFlow.Demo.Api.csproj" Aliases="demo" />
   </ItemGroup>
 

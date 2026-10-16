@@ -14,11 +14,12 @@ internal sealed record CareFlowService(string Name, string Audience)
     public static readonly CareFlowService Notifications = new("notifications", "careflow-notifications");
     public static readonly CareFlowService Audit = new("audit", "careflow-audit");
     public static readonly CareFlowService Triage = new("triage", "careflow-triage");
+    public static readonly CareFlowService Rights = new("rights", "careflow-rights");
 
-    public static IReadOnlyList<CareFlowService> All { get; } = [Vault, Consent, Scheduling, Notifications, Audit, Triage];
+    public static IReadOnlyList<CareFlowService> All { get; } = [Vault, Consent, Scheduling, Notifications, Audit, Triage, Rights];
 
     /// <summary>Os que guardam dados da clínica e têm a limpeza do demo (a auditoria é só de inserção).</summary>
-    public static IReadOnlyList<CareFlowService> Purgeable { get; } = [Vault, Consent, Scheduling, Notifications, Triage];
+    public static IReadOnlyList<CareFlowService> Purgeable { get; } = [Vault, Consent, Scheduling, Notifications, Triage, Rights];
 }
 
 /// <summary>Resposta inesperada de um serviço (fora do ar, configuração errada). Vira 502 sem detalhes.</summary>
@@ -195,6 +196,93 @@ internal sealed class CareFlowServices(IHttpClientFactory clients)
         throw new UpstreamException(CareFlowService.Triage.Name, response.StatusCode);
     }
 
+    /// <summary>Abre um pedido do titular (access, portability, erasure) para o paciente da sessão.</summary>
+    public async Task<RightsOutcome> OpenRightsRequestAsync(Guid clinic, Guid patientRef, string kind, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Rights, clinic, ["rights.write"], HttpMethod.Post, "v1/subject-requests",
+            JsonContent.Create(new { PatientRef = patientRef, Kind = kind }, options: Json), cancellationToken).ConfigureAwait(false);
+        return await RightsOutcomeAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RightsRequest> RightsRequestAsync(Guid clinic, Guid requestId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(CareFlowService.Rights, clinic, ["rights.read"], HttpMethod.Get, $"v1/subject-requests/{requestId}", null, cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(CareFlowService.Rights, response);
+        return await ReadAsync<RightsRequest>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RightsOutcome> ConfirmIdentityAsync(Guid clinic, Guid requestId, string? code, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Rights, clinic, ["rights.write"], HttpMethod.Post, $"v1/subject-requests/{requestId}/identity-confirmation",
+            JsonContent.Create(new { Code = code }, options: Json), cancellationToken).ConfigureAwait(false);
+        return await RightsOutcomeAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Caixa de entrada simulada do Notifications: a mensagem com o código, como o paciente a receberia.</summary>
+    public async Task<IReadOnlyList<InboxMessage>> VerificationMessagesAsync(Guid clinic, Guid requestId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Notifications, clinic, ["notifications.demo-inbox"], HttpMethod.Get, $"v1/demo/verification-messages/{requestId}", null, cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(CareFlowService.Notifications, response);
+        return await ReadAsync<InboxMessage[]>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gera o link e baixa o pacote sem token, como o titular faria, e tenta o mesmo link de novo: a segunda vez
+    /// precisa ser recusada. Devolve o ZIP (nulo se o pacote não existe mais) e se a reutilização foi recusada.
+    /// </summary>
+    public async Task<(byte[]? Zip, DateTimeOffset? LinkExpiresAt, bool ReuseRefused)> DownloadPackageAsync(Guid clinic, Guid requestId, CancellationToken cancellationToken)
+    {
+        using var linkResponse = await SendAsync(
+            CareFlowService.Rights, clinic, ["rights.write"], HttpMethod.Post, $"v1/subject-requests/{requestId}/download-links", null, cancellationToken).ConfigureAwait(false);
+        if (linkResponse.StatusCode == HttpStatusCode.Conflict)
+        {
+            return (null, null, false);
+        }
+
+        EnsureSuccess(CareFlowService.Rights, linkResponse);
+        var link = await ReadAsync<DownloadLinkBody>(linkResponse, cancellationToken).ConfigureAwait(false);
+
+        using var download = await SendAsync(
+            CareFlowService.Rights, clinic, [], HttpMethod.Post, "v1/downloads", JsonContent.Create(new { link.Token }, options: Json), cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(CareFlowService.Rights, download);
+        var zip = await download.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+        using var reuse = await SendAsync(
+            CareFlowService.Rights, clinic, [], HttpMethod.Post, "v1/downloads", JsonContent.Create(new { link.Token }, options: Json), cancellationToken).ConfigureAwait(false);
+        return (zip, link.ExpiresAt, reuse.StatusCode == HttpStatusCode.NotFound);
+    }
+
+    /// <summary>Se o cofre ainda consegue ler o paciente: 200 legível, 410 eliminado (chave destruída).</summary>
+    public async Task<HttpStatusCode> VaultReadStatusAsync(Guid clinic, Guid patientRef, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(CareFlowService.Vault, clinic, ["vault.read"], HttpMethod.Get, $"v1/patients/{patientRef}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Gone or HttpStatusCode.NotFound)
+        {
+            return response.StatusCode;
+        }
+
+        throw new UpstreamException(CareFlowService.Vault.Name, response.StatusCode);
+    }
+
+    private static async Task<RightsOutcome> RightsOutcomeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return new RightsOutcome(await ReadAsync<RightsRequest>(response, cancellationToken).ConfigureAwait(false), null, response.StatusCode);
+        }
+
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Conflict)
+        {
+            var problem = await ReadAsync<ProblemBody>(response, cancellationToken).ConfigureAwait(false);
+            return new RightsOutcome(null, problem.Code ?? "Direitos.Recusado", response.StatusCode);
+        }
+
+        throw new UpstreamException(CareFlowService.Rights.Name, response.StatusCode);
+    }
+
     /// <summary>Registra a clínica na partição isolada; falso se a partição está com outra clínica.</summary>
     public async Task<bool> LeasePartitionAsync(Guid clinic, int slot, TimeSpan duration, CancellationToken cancellationToken)
     {
@@ -293,6 +381,8 @@ internal sealed class CareFlowServices(IHttpClientFactory clients)
     private sealed record ProblemBody(string? Code);
 
     private sealed record PurgeBody(int Rows);
+
+    private sealed record DownloadLinkBody(string Token, DateTimeOffset ExpiresAt);
 }
 
 internal sealed record SyntheticPerson(string FullName, string Cpf, DateOnly BirthDate, string Email, string Phone);
@@ -349,3 +439,33 @@ internal sealed record TriageRecord(
 }
 
 internal sealed record AiConsent(string State, long Version);
+
+internal sealed record RightsService(string Service, string? Outcome, DateTimeOffset? AnsweredAt);
+
+internal sealed record RightsReceiptLine(string Service, string Item, string Description, string Action, int Records, DateTimeOffset? RetainedUntil, string Basis);
+
+internal sealed record RightsReceipt(string PolicyVersion, DateTimeOffset ErasedAt, IReadOnlyList<RightsReceiptLine> Lines);
+
+internal sealed record RightsPackage(bool Available, long Size, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? DestroyedAt);
+
+/// <summary>Os campos do pedido que o Painel mostra.</summary>
+internal sealed record RightsRequest(
+    Guid Id,
+    string Kind,
+    string Status,
+    string? DenialReason,
+    DateTimeOffset ReceivedAt,
+    DateTimeOffset DueAt,
+    bool Overdue,
+    DateTimeOffset? CodeSentAt,
+    string? CodeChannel,
+    DateTimeOffset? IdentityConfirmedAt,
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<RightsService> Services,
+    RightsReceipt? Receipt,
+    RightsPackage? Package);
+
+/// <summary>Pedido aceito ou recusado pelo serviço (código e status do problema).</summary>
+internal sealed record RightsOutcome(RightsRequest? Request, string? RefusalCode, HttpStatusCode Status);
+
+internal sealed record InboxMessage(string Channel, string Text, DateTimeOffset AcceptedAt);

@@ -86,6 +86,10 @@ internal sealed partial class BookAppointmentHandler(
                 metrics.Ineligible(PatientErrors.NoLegalBasis.Code);
                 return PatientErrors.NoLegalBasis;
 
+            case SaveOutcome.Erased:
+                metrics.Ineligible(PatientErrors.Erased.Code);
+                return PatientErrors.Erased;
+
             case SaveOutcome.SlotTaken:
                 // Retentativas simultâneas com a mesma chave disputam o mesmo horário, então a exclusion
                 // constraint pode disparar antes do índice de idempotência. Se a vencedora foi uma requisição
@@ -131,7 +135,9 @@ internal sealed partial class BookAppointmentHandler(
             var eligibility = patient.EnsureCanBook();
             if (eligibility.IsFailure)
             {
-                return eligibility.Error == PatientErrors.NotYetKnown ? SaveOutcome.PatientUnknown : SaveOutcome.NoLegalBasis;
+                return eligibility.Error == PatientErrors.NotYetKnown ? SaveOutcome.PatientUnknown
+                    : eligibility.Error == PatientErrors.Erased ? SaveOutcome.Erased
+                    : SaveOutcome.NoLegalBasis;
             }
 
             db.Appointments.Add(appointment);
@@ -193,6 +199,7 @@ internal sealed partial class BookAppointmentHandler(
         Saved,
         PatientUnknown,
         NoLegalBasis,
+        Erased,
         SlotTaken,
         KeyTaken,
     }

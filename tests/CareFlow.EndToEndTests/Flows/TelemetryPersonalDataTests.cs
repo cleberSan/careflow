@@ -6,7 +6,8 @@ namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
 /// Roda os fluxos que tocam dado pessoal (cadastro, leitura, busca por CPF, cadastro recusado, agendamento,
-/// aviso com fallback, triagem com IA e revisão, revogação, auditoria) e varre tudo o que foi exportado (spans, logs e métricas, depois dos
+/// aviso com fallback, triagem com IA e revisão, revogação, pedidos do titular com código, pacote e eliminação,
+/// auditoria) e varre tudo o que foi exportado (spans, logs e métricas, depois dos
 /// filtros de cada serviço) atrás do nome, CPF, telefone e e-mail do paciente sintético. Pseudônimo e clínica
 /// também não aparecem: caminhos de URL saem como template e query strings são descartadas.
 /// </summary>
@@ -47,6 +48,19 @@ public sealed class TelemetryPersonalDataTests(CareFlowSystem system)
             () => api.NotificationsAsync(appointment),
             list => list.Any(n => n.Kind == "Cancellation" && n.Status == "Sent"),
             description: "aviso de cancelamento enviado");
+
+        // Pedidos do titular: código errado, código certo, pacote baixado (e o link recusado na volta), eliminação.
+        var portability = await api.OpenSubjectRequestAsync(patientRef, "portability");
+        var code = await api.VerificationCodeAsync(portability.Id);
+        var wrongCode = code == "000000" ? "111111" : "000000";
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.ConfirmIdentityRawAsync(portability.Id, wrongCode)).StatusCode);
+        Assert.Equal("completed", (await api.ConfirmAndWaitAsync(portability.Id)).Status);
+        var link = await api.CreateDownloadLinkAsync(portability.Id);
+        Assert.Equal(HttpStatusCode.OK, (await api.DownloadAsync(link.Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await api.DownloadAsync(link.Token)).StatusCode);
+        var erasure = await api.OpenSubjectRequestAsync(patientRef, "erasure");
+        var erasureCode = await api.VerificationCodeAsync(erasure.Id);
+        Assert.Equal("completed", (await api.ConfirmAndWaitAsync(erasure.Id)).Status);
         await api.AuditTrailAsync(patientRef);
         await api.VerifyChainAsync();
         system.Telemetry.FlushMetrics();
@@ -74,6 +88,12 @@ public sealed class TelemetryPersonalDataTests(CareFlowSystem system)
             ("clínica", api.Clinic.ToString()),
             ("clínica (N)", api.Clinic.ToString("N")),
             ("queixa", "tosse seca e cansaço"),
+            // O código sozinho (6 dígitos) aparece por acaso em ids hexadecimais; o texto da mensagem não.
+            ("código de confirmação", $"é {code}"),
+            ("código da eliminação", $"é {erasureCode}"),
+            ("texto da mensagem do código", "seu código para confirmar"),
+            ("token do link", link.Token),
+            ("pedido", portability.Id.ToString()),
         };
 
         foreach (var (what, value) in forbidden)

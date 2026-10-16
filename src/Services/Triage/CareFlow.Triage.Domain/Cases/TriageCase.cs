@@ -26,8 +26,11 @@ public sealed class TriageCase
 
     public Guid PatientRef { get; private set; }
 
-    /// <summary>Texto como o paciente escreveu. Fica no banco do Triage, sob RLS; nunca sai do serviço.</summary>
-    public string Complaint { get; private set; } = string.Empty;
+    /// <summary>
+    /// Texto como o paciente escreveu. Fica no banco do Triage, sob RLS; nunca sai do serviço. Nulo depois da
+    /// eliminação a pedido do titular.
+    /// </summary>
+    public string? Complaint { get; private set; }
 
     public string AgeBand { get; private set; } = string.Empty;
 
@@ -114,6 +117,24 @@ public sealed class TriageCase
     /// Confirma a sugestão ou corrige a prioridade. Uma vez revisada, não muda: uma nova avaliação é uma nova
     /// triagem. Corrigir abaixo de um sinal de alarme é permitido (o profissional decide) e fica registrado.
     /// </summary>
+    /// <summary>Quando o texto foi apagado a pedido do titular.</summary>
+    public DateTimeOffset? ErasedAt { get; private set; }
+
+    /// <summary>
+    /// Eliminação a pedido do titular (ADR-0012): apaga a queixa, o texto mascarado enviado ao modelo e a justificativa
+    /// do modelo. Ficam a prioridade sugerida, os sinais de alarme, a decisão do profissional e o resumo SHA-256 do que
+    /// saiu (o mesmo da trilha de auditoria, ADR-0011). Devolve <c>false</c> se não havia texto a apagar.
+    /// </summary>
+    public bool EraseText(DateTimeOffset now)
+    {
+        var hadText = Complaint is not null || SentToModel is not null || Rationale is not null;
+        Complaint = null;
+        SentToModel = null;
+        Rationale = null;
+        ErasedAt ??= ToStoragePrecision(now);
+        return hadText;
+    }
+
     public Result Review(string? reviewer, ReviewDecision decision, TriagePriority? priority, DateTimeOffset now)
     {
         if (!IsReviewer(reviewer))

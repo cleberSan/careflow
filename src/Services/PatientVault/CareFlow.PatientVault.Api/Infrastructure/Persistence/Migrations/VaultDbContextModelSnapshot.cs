@@ -22,6 +22,40 @@ namespace CareFlow.PatientVault.Api.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Inbox.InboxMessage", b =>
+                {
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("consumer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Consumer", "MessageId")
+                        .HasName("pk_inbox_messages");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_inbox_messages_processed_at");
+
+                    b.ToTable("inbox_messages", (string)null);
+                });
+
             modelBuilder.Entity("CareFlow.BuildingBlocks.Messaging.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -86,6 +120,42 @@ namespace CareFlow.PatientVault.Api.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CareFlow.PatientVault.Api.Infrastructure.Persistence.PatientKeyRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PatientRef")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_ref");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("TenantKeyVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("tenant_key_version");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<byte[]>("WrappedKey")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("wrapped_key");
+
+                    b.HasKey("TenantId", "PatientRef")
+                        .HasName("pk_patient_keys");
+
+                    b.HasIndex("TenantId", "TenantKeyVersion")
+                        .HasDatabaseName("ix_patient_keys_tenant_key_version");
+
+                    b.ToTable("patient_keys", (string)null);
+                });
+
             modelBuilder.Entity("CareFlow.PatientVault.Api.Infrastructure.Persistence.PatientRecord", b =>
                 {
                     b.Property<Guid>("PatientRef")
@@ -103,7 +173,6 @@ namespace CareFlow.PatientVault.Api.Infrastructure.Persistence.Migrations
                         .HasColumnName("cpf_enc");
 
                     b.Property<byte[]>("CpfIndex")
-                        .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("cpf_index");
 
@@ -115,10 +184,18 @@ namespace CareFlow.PatientVault.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("email_enc");
 
+                    b.Property<DateTimeOffset?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
+
                     b.Property<byte[]>("FullName")
                         .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("full_name_enc");
+
+                    b.Property<short>("KeyScheme")
+                        .HasColumnType("smallint")
+                        .HasColumnName("key_scheme");
 
                     b.Property<int>("KeyVersion")
                         .HasColumnType("integer")

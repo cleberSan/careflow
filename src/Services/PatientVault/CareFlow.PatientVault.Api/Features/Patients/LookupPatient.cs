@@ -32,16 +32,17 @@ internal static class LookupPatientEndpoint
             return cpf.Error.ToProblem();
         }
 
-        var key = await keys.FindCurrentAsync(cancellationToken).ConfigureAwait(false);
-        if (key is null)
+        // Um índice por versão da chave da clínica: durante uma rotação, registros ainda não migrados têm o índice
+        // da versão anterior.
+        var indexes = await keys.CpfIndexesAsync(cpf.Value, cancellationToken).ConfigureAwait(false);
+        if (indexes.Count == 0)
         {
             return PatientErrors.NotFound.ToProblem();
         }
 
-        var index = PatientProtector.IndexCpf(cpf.Value, key);
         var patientRef = await db.Patients
             .AsNoTracking()
-            .Where(p => p.CpfIndex == index)
+            .Where(p => p.CpfIndex != null && indexes.Contains(p.CpfIndex))
             .Select(p => (Guid?)p.PatientRef)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);

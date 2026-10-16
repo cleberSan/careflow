@@ -20,7 +20,7 @@ internal static class GetPatientContactEndpoint
     public static async Task<Results<Ok<PatientContactResponse>, ProblemHttpResult>> HandleAsync(
         Guid patientRef,
         VaultDbContext db,
-        TenantKeyRing keys,
+        PatientKeyRing keys,
         VaultMetrics metrics,
         TimeProvider time,
         HttpContext context,
@@ -30,12 +30,13 @@ internal static class GetPatientContactEndpoint
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.PatientRef == patientRef, cancellationToken)
             .ConfigureAwait(false);
-        if (record is null)
+        // Eliminado é 404 aqui: para quem envia avisos, o paciente simplesmente não tem mais contato.
+        if (record is null || record.IsErased)
         {
             return PatientErrors.NotFound.ToProblem();
         }
 
-        var key = await keys.GetAsync(record.KeyVersion, cancellationToken).ConfigureAwait(false);
+        var key = await keys.ForReadingAsync(record, cancellationToken).ConfigureAwait(false);
         var patient = PatientProtector.Unprotect(record, key);
 
         db.Record(record.TenantId, record.PatientRef, AuditActor.From(context.User), VaultAudit.ContactRead, time.GetUtcNow());

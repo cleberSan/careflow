@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace CareFlow.EndToEndTests.Infrastructure;
 
-/// <summary>Chamadas HTTP aos cinco serviços, como um cliente da clínica faria. Só dados sintéticos.</summary>
+/// <summary>Chamadas HTTP aos serviços, como um cliente da clínica faria. Só dados sintéticos.</summary>
 public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -186,6 +186,82 @@ public sealed class CareFlowApi(CareFlowSystem system, Guid clinic)
         return (await response.Content.ReadFromJsonAsync<TriageResultView>(Json, Ct))!;
     }
 
+    /// <summary>Abre um pedido do titular (access, portability ou erasure) para o paciente.</summary>
+    public async Task<SubjectRequestView> OpenSubjectRequestAsync(Guid patientRef, string kind)
+    {
+        var response = await Client(system.Rights, "rights.write").PostAsJsonAsync("/v1/subject-requests", new { PatientRef = patientRef, Kind = kind }, Json, Ct);
+        Assert.True(response.StatusCode == HttpStatusCode.Accepted, $"Pedido do titular: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<SubjectRequestView>(Json, Ct))!;
+    }
+
+    public async Task<SubjectRequestView> SubjectRequestAsync(Guid requestId)
+    {
+        var response = await Client(system.Rights, "rights.read").GetAsync($"/v1/subject-requests/{requestId}", Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<SubjectRequestView>(Json, Ct))!;
+    }
+
+    public Task<HttpResponseMessage> SubjectRequestRawAsync(Guid requestId) =>
+        Client(system.Rights, "rights.read").GetAsync($"/v1/subject-requests/{requestId}", Ct);
+
+    /// <summary>
+    /// O código de 6 dígitos como chegou ao paciente, lido no provedor simulado do Notifications (a caixa de entrada
+    /// do Painel). Espera o código ser enviado.
+    /// </summary>
+    public async Task<string> VerificationCodeAsync(Guid requestId)
+    {
+        var messages = await Eventually.GetAsync(
+            async () => (await Client(system.Notifications, "notifications.demo-inbox")
+                .GetFromJsonAsync<VerificationMessageView[]>($"/v1/demo/verification-messages/{requestId}", Json, Ct))!,
+            list => list.Length > 0,
+            description: "código de confirmação na caixa de entrada simulada");
+        var match = System.Text.RegularExpressions.Regex.Match(messages[^1].Text, @"\b(\d{6})\b");
+        Assert.True(match.Success, "Mensagem sem código de 6 dígitos.");
+        return match.Groups[1].Value;
+    }
+
+    public async Task<HttpResponseMessage> ConfirmIdentityRawAsync(Guid requestId, string code) =>
+        await Client(system.Rights, "rights.write").PostAsJsonAsync($"/v1/subject-requests/{requestId}/identity-confirmation", new { Code = code }, Json, Ct);
+
+    /// <summary>Confirma a identidade com o código da caixa de entrada e espera o pedido terminar.</summary>
+    public async Task<SubjectRequestView> ConfirmAndWaitAsync(Guid requestId)
+    {
+        var code = await VerificationCodeAsync(requestId);
+        var response = await ConfirmIdentityRawAsync(requestId, code);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Confirmação: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return await Eventually.GetAsync(
+            () => SubjectRequestAsync(requestId),
+            request => request.Status is "completed" or "denied",
+            description: "pedido do titular concluído por todos os serviços");
+    }
+
+    public async Task<DownloadLinkView> CreateDownloadLinkAsync(Guid requestId)
+    {
+        var response = await Client(system.Rights, "rights.write").PostAsync($"/v1/subject-requests/{requestId}/download-links", null, Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<DownloadLinkView>(Json, Ct))!;
+    }
+
+    /// <summary>Baixa o pacote pelo token, sem identidade nenhuma, como o titular faria pelo link.</summary>
+    public async Task<HttpResponseMessage> DownloadAsync(string token)
+    {
+        using var anonymous = system.Rights.AnonymousClient();
+        return await anonymous.PostAsJsonAsync("/v1/downloads", new { Token = token }, Json, Ct);
+    }
+
+    public async Task<HttpStatusCode> ReplayErasureAsync(Guid requestId)
+    {
+        var response = await Client(system.Rights, "rights.admin").PostAsync($"/v1/subject-requests/{requestId}/erasure-replay", null, Ct);
+        return response.StatusCode;
+    }
+
+    /// <summary>Status da leitura do paciente no cofre: 200 legível, 410 eliminado, 404 não existe nesta clínica.</summary>
+    public async Task<HttpStatusCode> PatientReadStatusAsync(Guid patientRef)
+    {
+        var response = await Client(system.Vault, "vault.read").GetAsync($"/v1/patients/{patientRef}", Ct);
+        return response.StatusCode;
+    }
+
     /// <summary>Quantas vezes o consumidor do serviço registrou estas mensagens no Inbox (lido como admin).</summary>
     public static async Task<long> InboxCountAsync(ServiceHost service, params Guid[] messageIds)
     {
@@ -218,3 +294,28 @@ public sealed record ChainVerificationView(bool Intact, long EntriesVerified, lo
 public sealed record AiConsentResultView(string State, long Version);
 
 public sealed record TriageResultView(Guid Id, string Complaint, string? SentToModel, string? PromptDigest, string ModelStatus, string? SuggestedPriority, string Source, string Decision);
+
+public sealed record SubjectRequestServiceView(string Service, string? Outcome, DateTimeOffset? AnsweredAt);
+
+public sealed record ReceiptLineView(string Service, string Item, string Description, string Action, int Records, DateTimeOffset? RetainedUntil, string Basis);
+
+public sealed record ErasureReceiptView(string PolicyVersion, DateTimeOffset ErasedAt, ReceiptLineView[] Lines);
+
+public sealed record PackageInfoView(bool Available, long Size, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? DestroyedAt);
+
+public sealed record SubjectRequestView(
+    Guid Id,
+    Guid PatientRef,
+    string Kind,
+    string Status,
+    string? DenialReason,
+    DateTimeOffset DueAt,
+    string? CodeChannel,
+    DateTimeOffset? IdentityConfirmedAt,
+    SubjectRequestServiceView[] Services,
+    ErasureReceiptView? Receipt,
+    PackageInfoView? Package);
+
+public sealed record VerificationMessageView(string Channel, string Text, DateTimeOffset AcceptedAt);
+
+public sealed record DownloadLinkView(string Token, DateTimeOffset ExpiresAt);

@@ -87,6 +87,10 @@ public sealed class AuditApiFixture : IAsyncLifetime
         return await processor.ProcessAsync(context, body, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Eventos que a auditoria publicou para a clínica (respostas a pedidos do titular).</summary>
+    public Task<IReadOnlyList<OutboxRow>> OutboxAsync(Guid tenantId) =>
+        OutboxRows.ReadAsync(AdminConnectionString, tenantId, TestContext.Current.CancellationToken);
+
     public HttpClient CreateClient(Guid? tenantId, params string[] scopes)
     {
         var client = Factory.CreateClient();

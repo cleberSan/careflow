@@ -28,7 +28,7 @@ Para usar um PostgreSQL já existente nos testes de integração, defina `CAREFL
 docker compose up -d
 ```
 
-O script `deploy/postgres/init-dev.sql` cria um banco por serviço, os logins das APIs (`*_api`) e dos despachantes de mensagens (`*_dispatcher`), todos sem superusuário, para que o Row-Level Security valha também em desenvolvimento. As migrations rodam com o papel `careflow` (connection string `...Migrations`). Se o seu volume é anterior à fase 4, recrie-o uma vez: `docker compose down -v && docker compose up -d`.
+O script `deploy/postgres/init-dev.sql` cria um banco por serviço, os logins das APIs (`*_api`) e dos despachantes de mensagens (`*_dispatcher`), todos sem superusuário, para que o Row-Level Security valha também em desenvolvimento. As migrations rodam com o papel `careflow` (connection string `...Migrations`). Se o seu volume é anterior à fase 8 (banco `careflow_rights`), recrie-o uma vez: `docker compose down -v && docker compose up -d`. O script só roda quando o volume é criado.
 
 O RabbitMQ local fica em `localhost:5672` (painel em `http://localhost:15672`, usuário `careflow`, senha `careflow-dev`, só para desenvolvimento). Com o broker fora, os serviços continuam atendendo e os eventos esperam no Outbox (ADR-0006).
 
@@ -113,6 +113,31 @@ dotnet user-jwts create --project src/Services/Triage/CareFlow.Triage.Api \
 
 O modelo padrão é `Fake`: regras determinísticas, nenhuma chamada de rede. Para reproduzir as respostas gravadas do Claude, use `Triage:Model:Provider=Recorded` e `Triage:Model:RecordingsPath` apontando para `eval/triage/recordings` (ADR-0011). Para chamar o modelo de verdade localmente, `Triage:Model:Provider=Anthropic` com a chave em `ANTHROPIC_API_KEY` (variável de ambiente ou user secret, nunca em arquivo versionado); `Triage:Model:MaxCalls` limita as chamadas por processo. A queixa só sai do serviço depois de mascarada, e só para pacientes com o consentimento `ai-triage` (base legal `specific-consent`).
 
+### Subindo o serviço de pedidos do titular (Rights)
+
+O código de confirmação de identidade vai do Rights ao Notifications cifrado para uma chave P-256 (ADR-0012): a privada fica nos user secrets do Notifications, a pública nos do Rights. O Notifications não sobe sem ela desde a fase 8. O Rights também precisa da própria chave de 32 bytes, que embrulha as chaves dos pedidos e dos pacotes. Em produção as duas vêm de um cofre de segredos.
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout -out /tmp/careflow-identity.pem
+dotnet user-secrets set "IdentityVerification:PrivateKey" \
+  "$(openssl pkcs8 -topk8 -nocrypt -in /tmp/careflow-identity.pem -outform DER | base64 -w0)" \
+  --project src/Services/Notifications/CareFlow.Notifications.Api
+dotnet user-secrets set "IdentityVerification:NotificationsPublicKey" \
+  "$(openssl ec -in /tmp/careflow-identity.pem -pubout -outform DER 2>/dev/null | base64 -w0)" \
+  --project src/Services/Rights/CareFlow.Rights.Api
+rm /tmp/careflow-identity.pem
+dotnet user-secrets set "Rights:Keys:KeyEncryptionKey" "$(openssl rand -base64 32)" \
+  --project src/Services/Rights/CareFlow.Rights.Api
+
+dotnet run --project src/Services/Rights/CareFlow.Rights.Api
+dotnet user-jwts create --project src/Services/Rights/CareFlow.Rights.Api \
+  --scope "rights.read rights.write" --claim tenant_id=11111111-1111-1111-1111-111111111111 -o token
+```
+
+O código sai pelo provedor simulado do Notifications. Para lê-lo localmente, ligue `Demo:SimulatedInboxEnabled` no Notifications e chame `GET /v1/demo/verification-messages/{id}` com o escopo `notifications.demo-inbox` (a rota não existe em `Production`). Os pacotes vencidos são destruídos a cada 10 minutos; `Rights:SweepPackages=false` desliga a rotina (os testes a chamam direto).
+
+Depois de restaurar um backup de qualquer serviço, reaplique as eliminações concluídas com `POST /v1/subject-requests/{id}/erasure-replay` (escopo `rights.admin`). Para migrar o cofre para chave por paciente ou rotacionar a chave da clínica, use as rotas `/v1/keys` do cofre (escopo `vault.keys`), só depois de todas as instâncias estarem na versão nova.
+
 ### Avaliação da triagem e gravação das respostas
 
 `tests/CareFlow.Triage.Evaluation` roda os casos sintéticos de `eval/triage/cases.json` contra as gravações e publica as métricas (acerto, alarmes nunca rebaixados, injeções barradas, recusas) em `CAREFLOW_TRIAGE_EVALUATION`. O CI nunca chama o modelo, e todas as gravações são obrigatórias (`recordingsRequired`): se faltar uma, o build reprova com o aviso para rodar o workflow de gravação.
@@ -139,7 +164,7 @@ O Demo é o BFF do Painel de Privacidade e Resiliência (ADR-0010): cria uma cl�
 ```bash
 DEMO_KEY="$(openssl rand -base64 32)"
 dotnet user-secrets set "Demo:Tokens:SigningKey" "$DEMO_KEY" --project src/Services/Demo/CareFlow.Demo.Api
-for service in PatientVault Consent Scheduling Notifications Audit Triage; do
+for service in PatientVault Consent Scheduling Notifications Audit Triage Rights; do
   project="src/Services/$service/CareFlow.$service.Api"
   dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Issuer" "careflow-demo-local" --project "$project"
   dotnet user-secrets set "Authentication:Schemes:Bearer:SigningKeys:9:Value" "$DEMO_KEY" --project "$project"
@@ -150,11 +175,11 @@ unset DEMO_KEY
 dotnet run --project src/Services/Demo/CareFlow.Demo.Api
 ```
 
-O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o Notifications aceitar partições isoladas, ligue `FaultInjection:Enabled`, `FaultInjection:ClinicOverridesEnabled` e `FaultInjection:IsolatedSlots` (por exemplo 8) nos user secrets dele. Com a stack de observabilidade de pé, o Demo lê traces do Tempo e logs do Loki; sem ela, o Painel mostra que a telemetria não está disponível. A sessão é um cookie `__Host-` e toda chamada precisa do cabeçalho `X-CareFlow-Demo: 1`; exemplos em `CareFlow.Demo.Api.http`.
+O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o cenário dos direitos do titular, ligue também `Demo:SimulatedInboxEnabled` no Notifications. Para o Notifications aceitar partições isoladas, ligue `FaultInjection:Enabled`, `FaultInjection:ClinicOverridesEnabled` e `FaultInjection:IsolatedSlots` (por exemplo 8) nos user secrets dele. Com a stack de observabilidade de pé, o Demo lê traces do Tempo e logs do Loki; sem ela, o Painel mostra que a telemetria não está disponível. A sessão é um cookie `__Host-` e toda chamada precisa do cabeçalho `X-CareFlow-Demo: 1`; exemplos em `CareFlow.Demo.Api.http`.
 
 ### Gravação do Painel
 
-O site não chama o Demo: ele reproduz uma gravação real dos cinco cenários (o da triagem usa as respostas gravadas do modelo, ADR-0011). O teste `PanelRecordingTests` grava o arquivo quando a variável `CAREFLOW_PANEL_RECORDING` aponta para um caminho; o CI publica o resultado como artefato `panel-recording`.
+O site não chama o Demo: ele reproduz uma gravação real dos seis cenários (o da triagem usa as respostas gravadas do modelo, ADR-0011; o dos direitos do titular, a caixa de entrada simulada, ADR-0012). O teste `PanelRecordingTests` grava o arquivo quando a variável `CAREFLOW_PANEL_RECORDING` aponta para um caminho; o CI publica o resultado como artefato `panel-recording`.
 
 ```bash
 CAREFLOW_PANEL_RECORDING=$PWD/panel.json CAREFLOW_COMMIT=$(git rev-parse HEAD) \

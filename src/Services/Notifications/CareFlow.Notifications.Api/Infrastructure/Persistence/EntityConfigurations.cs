@@ -22,7 +22,7 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
             table.HasCheckConstraint("ck_notifications_kind", "kind IN ('Confirmation', 'Reminder', 'Cancellation')");
             table.HasCheckConstraint("ck_notifications_status", "status IN ('Pending', 'Sent', 'NotSent', 'Superseded', 'Expired', 'Failed')");
             table.HasCheckConstraint("ck_notifications_rounds", "rounds >= 0");
-            table.HasCheckConstraint("ck_notifications_sent", "status <> 'Sent' OR (sent_via IS NOT NULL AND provider_message_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_notifications_sent", "status <> 'Sent' OR (sent_via IS NOT NULL AND (provider_message_id IS NOT NULL OR erased_at IS NOT NULL))");
             table.HasCheckConstraint("ck_notifications_not_sent", "status <> 'NotSent' OR not_sent_reason IS NOT NULL");
         });
 
@@ -39,6 +39,7 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         builder.Property(n => n.Rounds).HasColumnName("rounds");
         builder.Property(n => n.SentVia).HasColumnName("sent_via").HasConversion<string>().HasMaxLength(16);
         builder.Property(n => n.ProviderMessageId).HasColumnName("provider_message_id").HasMaxLength(128);
+        builder.Property(n => n.ErasedAt).HasColumnName("erased_at");
         builder.Property(n => n.NotSentReason).HasColumnName("not_sent_reason").HasConversion<string>().HasMaxLength(16);
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");
         builder.Property(n => n.CompletedAt).HasColumnName("completed_at");
