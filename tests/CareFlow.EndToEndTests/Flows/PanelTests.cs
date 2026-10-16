@@ -261,6 +261,40 @@ public sealed class PanelTests(CareFlowSystem system)
     }
 
     [Fact]
+    public async Task RightsRequests_ReadTheCodeInTheSimulatedInbox_AndStayInsideTheSession()
+    {
+        // Arrange
+        using var visitor = new DemoClient(system.Demo);
+        using var other = new DemoClient(system.Demo);
+        await visitor.OpenAsync();
+        await other.OpenAsync();
+
+        // Act
+        var opened = await visitor.OpenRightsRequestAsync("access");
+        var inbox = await Eventually.GetAsync(() => visitor.InboxAsync(opened.Id), m => m.Length > 0, description: "código na caixa de entrada");
+        var code = System.Text.RegularExpressions.Regex.Match(inbox[^1].Text, @"\b(\d{6})\b").Groups[1].Value;
+        using var peek = await other.RightsRequestRawAsync(opened.Id);
+        using var guess = await other.ConfirmIdentityRawAsync(opened.Id, code);
+        using var invalid = await visitor.ConfirmIdentityRawAsync(opened.Id, "12ab");
+        await visitor.ConfirmIdentityAsync(opened.Id, code);
+        var done = await Eventually.GetAsync(() => visitor.RightsRequestAsync(opened.Id), r => r.Status == "completed", description: "pedido concluído");
+        var package = await visitor.PackageAsync(opened.Id);
+
+        // Assert
+        Assert.Equal("received", opened.Status);
+        Assert.Equal(HttpStatusCode.NotFound, peek.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, guess.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(6, done.Services.Count);
+        Assert.Equal(["dados.json", "fhir-bundle.json", "leia-me.html"], package.Files.Select(f => f.Name).Order());
+        Assert.Contains("Patient", package.FhirResources);
+        Assert.True(package.ReuseRefused);
+
+        await visitor.EndAsync();
+        await other.EndAsync();
+    }
+
+    [Fact]
     public async Task RateLimits_CapNewSessionsPerClient_AndRequestsPerSession()
     {
         // Arrange: uma instância com limites baixos e partições próprias.

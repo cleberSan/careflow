@@ -2,12 +2,14 @@ extern alias audit;
 extern alias consent;
 extern alias demo;
 extern alias notifications;
+extern alias rights;
 extern alias scheduling;
 extern alias triage;
 extern alias vault;
 
 using System.Security.Cryptography;
 
+using CareFlow.BuildingBlocks.Cryptography;
 using CareFlow.EndToEndTests.Infrastructure;
 using CareFlow.Testing;
 
@@ -29,7 +31,7 @@ namespace CareFlow.EndToEndTests.Infrastructure;
 
 /// <summary>
 /// O sistema inteiro num processo: PostgreSQL e RabbitMQ reais (Testcontainers), um banco por serviço e os
-/// seis serviços com mensageria ligada, cada um com o login da API e o do despachante, sem superusuário.
+/// sete serviços com mensageria ligada, cada um com o login da API e o do despachante, sem superusuário.
 /// Os logs de todos os serviços são capturados para conferir que nenhum carrega dado pessoal.
 /// O Notifications lê o contato no cofre por HTTP (o cofre roda em Kestrel) com token de serviço
 /// ES256 de verdade, e sobe com o WhatsApp derrubado por falha injetada: o fallback é o caminho normal aqui.
@@ -58,7 +60,10 @@ public sealed class CareFlowSystem : IAsyncLifetime
     /// <summary>Triagem com IA reproduzindo as respostas gravadas do modelo (<c>eval/triage/recordings</c>, ADR-0011).</summary>
     public ServiceHost Triage { get; private set; } = null!;
 
-    /// <summary>O backend do Painel, falando com os cinco serviços como faria fora dos testes.</summary>
+    /// <summary>Pedidos do titular (acesso, portabilidade e eliminação), ADR-0012.</summary>
+    public ServiceHost Rights { get; private set; } = null!;
+
+    /// <summary>O backend do Painel, falando com os serviços como faria fora dos testes.</summary>
     public WebApplicationFactory<demo::Program> Demo { get; private set; } = null!;
 
     public BrokerProbe Broker { get; private set; } = null!;
@@ -72,6 +77,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
         Broker = await BrokerProbe.ConnectAsync(_rabbit, brokerUri);
 
         using var serviceTokenKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        // O código de confirmação de identidade vai cifrado do serviço de pedidos (chave pública) ao Notifications.
+        using var identityKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
 
         // Todos rodam em Kestrel de verdade: quem chama outro serviço (Notifications no cofre, o Demo em todos) usa
         // o SocketsHttpHandler, que é quem propaga o traceparent e cria o span de cliente, como em produção.
@@ -111,7 +119,9 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("FaultInjection:Channels:whatsapp:Mode", "Unavailable"),
             ("Notifications:Resilience:BreakDuration", "00:00:03"),
             ("FaultInjection:ClinicOverridesEnabled", "true"),
-            ("FaultInjection:IsolatedSlots", "16"));
+            ("FaultInjection:IsolatedSlots", "16"),
+            ("IdentityVerification:PrivateKey", Convert.ToBase64String(identityKey.ExportPkcs8PrivateKey())),
+            ("Demo:SimulatedInboxEnabled", "true"));
 
         // O Triage lê idade e nome no cofre com o mesmo par de chaves de serviço (um por serviço em produção) e
         // nunca chama a rede para o modelo: só reproduz as gravações versionadas.
@@ -123,8 +133,18 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ("Triage:Model:Provider", "Recorded"),
             ("Triage:Model:RecordingsPath", RepositoryPaths.TriageRecordings));
 
+        // A limpeza dos pacotes vencidos roda pelos testes (no tempo deles), não por um timer.
+        Rights = await StartAsync<rights::Program>(
+            new ServiceSpec("rights", "Rights", "careflow_rights", "rights_app", "rights_relay"),
+            brokerUri,
+            ("Rights:Keys:KeyEncryptionKey", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))),
+            ("IdentityVerification:NotificationsPublicKey", SealedBox.ExportPublicKey(identityKey)),
+            ("Rights:SweepPackages", "false"));
+
         // Eventos publicados antes de a fila do consumidor existir iriam para a fila de não roteados.
-        await Broker.WaitForQueuesAsync("careflow.scheduling", "careflow.audit", "careflow.notifications", "careflow.triage");
+        await Broker.WaitForQueuesAsync(
+            "careflow.scheduling", "careflow.audit", "careflow.notifications", "careflow.triage", "careflow.rights",
+            "careflow.patient-vault", "careflow.consent");
 
         Demo = StartDemo();
     }
@@ -143,6 +163,7 @@ public sealed class CareFlowSystem : IAsyncLifetime
             ["notifications"] = Notifications,
             ["audit"] = Audit,
             ["triage"] = Triage,
+            ["rights"] = Rights,
         };
 
         var factory = new WebApplicationFactory<demo::Program>().WithWebHostBuilder(builder =>
@@ -334,6 +355,9 @@ public sealed class ServiceHost(ServiceSpec spec, Func<HttpClient> createClient,
 
     /// <summary>Endereço real, quando o serviço roda em Kestrel (para outro serviço chamá-lo por HTTP).</summary>
     public Uri? BaseAddress { get; init; }
+
+    /// <summary>Cliente sem identidade nenhuma (sem os cabeçalhos de teste): só passa em endpoints anônimos.</summary>
+    public HttpClient AnonymousClient() => createClient();
 
     public HttpClient Client(Guid tenantId, params string[] scopes)
     {

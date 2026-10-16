@@ -16,11 +16,11 @@ using NotificationView = demo::CareFlow.Demo.Api.Features.NotificationView;
 namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
-/// Grava os cinco cenários do Painel contra o sistema inteiro, com um paciente sintético só, para o site
+/// Grava os seis cenários do Painel contra o sistema inteiro, com um paciente sintético só, para o site
 /// reproduzir (ADR-0010). Roda em todo CI como teste; o arquivo só é escrito quando
 /// <c>CAREFLOW_PANEL_RECORDING</c> aponta para um caminho. Ordem: reserva, visões, queda do WhatsApp, triagem com
-/// IA (fase 7, com as respostas gravadas do modelo) e, por último, a revogação (que cancela tudo e impediria novas
-/// reservas).
+/// IA (fase 7, com as respostas gravadas do modelo), a revogação (que cancela tudo e impediria novas reservas) e,
+/// por último, os direitos do titular (fase 8): portabilidade com o pacote e a eliminação, que encerra o paciente.
 /// </summary>
 [Collection(SequentialFlows.Name)]
 public sealed class PanelRecordingTests(CareFlowSystem system)
@@ -36,7 +36,7 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task RecordsTheFiveScenarios_WithoutPersonalDataOutsideTheVault()
+    public async Task RecordsTheSixScenarios_WithoutPersonalDataOutsideTheVault()
     {
         // Arrange: partição própria e espaço para as reservas do cenário de resiliência.
         await using var demo = system.StartDemo(("Demo:FirstSlot", "14"), ("Demo:Slots", "1"), ("Demo:MaxBookingsPerSession", "8"));
@@ -93,10 +93,13 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
             t => t.Spans.Select(s => s.Service).Distinct().Count() >= 5,
             description: "trace da revogação");
         var revokeLogs = await visitor.LogsAsync(revoke.TraceId);
+
+        // Act 5: direitos do titular. Portabilidade (código, todos os serviços, pacote) e depois a eliminação.
+        var rights = await RightsScenarioAsync(visitor);
         await visitor.EndAsync();
 
         var recording = new PanelRecording(
-            Schema: 2,
+            Schema: 3,
             RecordedAt: DateTimeOffset.UtcNow,
             Commit: Environment.GetEnvironmentVariable("GITHUB_SHA") ?? Environment.GetEnvironmentVariable("CAREFLOW_COMMIT") ?? "local",
             Source: "Testes de ponta a ponta do CareFlow (Testcontainers com PostgreSQL e RabbitMQ, provedores simulados)",
@@ -105,7 +108,8 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
             Views: new ViewsScenario(views.Scheduling, views.ConsentPatientRef, views.Consent, views.Notifications, views.LogMask, bookingLogs),
             Resilience: new ResilienceScenario(steps, fallbackTrace),
             Triage: triage,
-            Revocation: new RevocationScenario(revoke, before, after, revokeTrace, revokeLogs));
+            Revocation: new RevocationScenario(revoke, before, after, revokeTrace, revokeLogs),
+            Rights: rights);
 
         // Assert: o que vai para o navegador não tem dado pessoal fora da visão (já mascarada) do cofre e do que o
         // paciente escreveu na queixa (nome inventado e e-mail em example.com, como no cofre).
@@ -115,6 +119,7 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
             {
                 Patient = recording.Patient with { Vault = null },
                 Triage = triage with { Steps = [.. triage.Steps.Select(s => s with { Complaint = string.Empty, Submitted = s.Submitted with { Complaint = string.Empty }, Reviewed = s.Reviewed with { Complaint = string.Empty } })] },
+                Rights = rights with { Package = rights.Package with { PatientName = null } },
             },
             Json);
         Assert.DoesNotContain(views.Vault.Cpf, full, StringComparison.Ordinal);
@@ -130,12 +135,55 @@ public sealed class PanelRecordingTests(CareFlowSystem system)
         Assert.Equal("Closed", steps[^1].Channels.Channels.Single(c => c.Channel == "whatsapp").Circuit);
         Assert.Contains(fallbackTrace.Spans, s => s.Events.Any(e => e.Name == "fallback"));
         Assert.True(after.Chain.Intact);
+        Assert.Equal(views.Vault.FullName, rights.Package.PatientName);
+        Assert.False(rights.Evidence.VaultReadable);
+        Assert.True(rights.Evidence.Chain.Intact);
 
         if (Environment.GetEnvironmentVariable(OutputVariable) is { Length: > 0 } path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             await File.WriteAllTextAsync(path, full, Ct);
         }
+    }
+
+    /// <summary>
+    /// Portabilidade e eliminação pelo Painel: o código chega na caixa de entrada simulada, o pedido segue para os
+    /// seis serviços, o pacote é baixado pelo link de uso único e, na eliminação, o cofre deixa de ler o paciente
+    /// com a cadeia da auditoria íntegra. O código gravado já foi usado e o pacote, destruído com a sessão.
+    /// </summary>
+    private static async Task<RightsScenario> RightsScenarioAsync(DemoClient visitor)
+    {
+        var portability = await RightsFlowAsync(visitor, "portability");
+        var package = await visitor.PackageAsync(portability.Opened.Id);
+        var erasure = await RightsFlowAsync(visitor, "erasure");
+        var evidence = await Eventually.GetAsync(
+            () => visitor.ErasureEvidenceAsync(),
+            e => !e.VaultReadable && e.Audit.Any(a => a.Action == "patient.erased") && e.Audit.Any(a => a.Action == "subject-request.completed"),
+            description: "evidência da eliminação");
+        var trace = await Eventually.GetAsync(
+            () => visitor.TraceAsync(erasure.Confirmed.TraceId!),
+            t => t.Spans.Select(s => s.Service).Distinct().Count() >= 7,
+            description: "trace da eliminação em todos os serviços");
+        var logs = await visitor.LogsAsync(erasure.Confirmed.TraceId!);
+
+        Assert.All([portability.Completed, erasure.Completed], r => Assert.Equal("completed", r.Status));
+        Assert.Equal(["Appointment", "Consent", "Patient"], package.FhirResources.Distinct().Order());
+        Assert.True(package.ReuseRefused);
+        Assert.Equal("2026-10.1", erasure.Completed.Receipt!.PolicyVersion);
+        return new RightsScenario(portability, package, erasure, evidence, trace, logs);
+    }
+
+    private static async Task<RightsFlow> RightsFlowAsync(DemoClient visitor, string kind)
+    {
+        var opened = await visitor.OpenRightsRequestAsync(kind);
+        var inbox = await Eventually.GetAsync(() => visitor.InboxAsync(opened.Id), m => m.Length > 0, description: "código na caixa de entrada");
+        var code = System.Text.RegularExpressions.Regex.Match(inbox[^1].Text, @"\b(\d{6})\b").Groups[1].Value;
+        var confirmed = await visitor.ConfirmIdentityAsync(opened.Id, code);
+        var completed = await Eventually.GetAsync(
+            () => visitor.RightsRequestAsync(opened.Id),
+            r => r.Status is "completed" or "denied",
+            description: $"pedido de {kind} concluído");
+        return new RightsFlow(opened, inbox, confirmed, completed);
     }
 
     /// <summary>
@@ -233,7 +281,8 @@ internal sealed record PanelRecording(
     ViewsScenario Views,
     ResilienceScenario Resilience,
     TriageScenario Triage,
-    RevocationScenario Revocation);
+    RevocationScenario Revocation,
+    RightsScenario Rights);
 
 internal sealed record RecordedPatient(MaskedVault? Vault, Guid Pseudonym, string LogMask);
 
@@ -263,6 +312,20 @@ internal sealed record ResilienceStep(long AtMs, string Action, ChannelsView Cha
 internal sealed record ResilienceScenario(IReadOnlyList<ResilienceStep> Steps, TraceView FallbackTrace);
 
 internal sealed record RevocationScenario(ActionView Action, PropagationView Before, PropagationView After, TraceView Trace, IReadOnlyList<LogView> Logs);
+
+internal sealed record RightsFlow(
+    RightsRequestView Opened,
+    IReadOnlyList<InboxMessageView> Inbox,
+    RightsRequestView Confirmed,
+    RightsRequestView Completed);
+
+internal sealed record RightsScenario(
+    RightsFlow Portability,
+    PackageContentsView Package,
+    RightsFlow Erasure,
+    ErasureEvidenceView Evidence,
+    TraceView Trace,
+    IReadOnlyList<LogView> Logs);
 
 internal sealed record TriageStep(string Scenario, string Case, string Complaint, TriageView Submitted, TriageView Reviewed);
 

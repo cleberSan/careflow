@@ -9,8 +9,8 @@ namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
 /// Limpeza do Painel (ADR-0010): quando a sessão acaba, o serviço Demo apaga a clínica sintética dela em cada
-/// serviço. Some tudo da clínica (inclusive Outbox, Inbox e projeções); outra clínica não perde nada; a trilha de
-/// auditoria fica, porque é só de inserção.
+/// serviço. Some tudo da clínica (inclusive Outbox, Inbox, projeções, pedidos do titular e pacotes); outra clínica
+/// não perde nada; a trilha de auditoria fica, porque é só de inserção.
 /// </summary>
 [Collection(SequentialFlows.Name)]
 public sealed class DemoPurgeTests(CareFlowSystem system)
@@ -20,12 +20,12 @@ public sealed class DemoPurgeTests(CareFlowSystem system)
     private static DateTimeOffset Slot(int day, int hour) =>
         new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero).AddDays(day).AddHours(hour);
 
-    private IEnumerable<ServiceHost> Purgeable => [system.Vault, system.Consent, system.Scheduling, system.Notifications];
+    private IEnumerable<ServiceHost> Purgeable => [system.Vault, system.Consent, system.Scheduling, system.Notifications, system.Triage, system.Rights];
 
     [Fact]
     public async Task Purge_RemovesEveryRowOfTheSessionClinic_AndNothingElse()
     {
-        // Arrange: duas clínicas com o fluxo completo (cadastro, consentimentos, reserva e aviso).
+        // Arrange: duas clínicas com o fluxo completo (cadastro, consentimentos, reserva, aviso, triagem e pedido).
         var visitor = await SeedClinicAsync(day: 40);
         var other = await SeedClinicAsync(day: 41);
         var auditBefore = await CountRowsAsync(system.Audit, visitor.Clinic);
@@ -74,11 +74,15 @@ public sealed class DemoPurgeTests(CareFlowSystem system)
         var patient = await api.RegisterPatientAsync();
         await api.GrantAsync(patient);
         await api.GrantAsync(patient, "notifications");
+        await api.GrantAsync(patient, "ai-triage");
         var appointment = await api.BookWhenEligibleAsync(patient, Slot(day, 10));
         await Eventually.GetAsync(
             () => api.NotificationsAsync(appointment),
             list => list.Any(n => n.Kind == "Confirmation" && n.Status == "Sent"),
             description: "confirmação enviada");
+        await api.SubmitTriageAsync(patient, "Estou com tosse seca e cansaço há três dias, pior à noite, com dor no corpo e um pouco de dor de garganta.");
+        var request = await api.OpenSubjectRequestAsync(patient, "access");
+        Assert.Equal("completed", (await api.ConfirmAndWaitAsync(request.Id)).Status);
         await Eventually.GetAsync(
             () => api.AuditTrailAsync(patient),
             entries => entries.Any(e => e.Action == "appointment.booked"),
