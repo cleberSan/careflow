@@ -1,0 +1,9 @@
+{
+  "digest": "0d83c63d8506ce283e0ab435503710a5c7ce96ddeb2166cc6958071ea8722dcb",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:29.0256288+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Queimadura na mão com bolhas grandes e dor intensa, que exige avaliação prolongada da lesão ainda neste atendimento.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Queimei a m\\u00E3o com \\u00F3leo quente, fez bolhas grandes e d\\u00F3i muito.\"}"
+}

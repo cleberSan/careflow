@@ -1,0 +1,9 @@
+{
+  "digest": "710e205033107fd1b3632c1e38bc5057b7e1f650e4ec7b55feb0dfa580707136",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:47.1287143+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Lactente de dois meses com febre; em bebês dessa idade a febre exige avaliação imediata, por isso a prioridade mais alta na dúvida.\"}",
+  "payload": "{\"faixaEtaria\":\"0-1\",\"queixa\":\"Meu beb\\u00EA de dois meses est\\u00E1 com febre.\"}"
+}

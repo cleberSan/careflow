@@ -1,0 +1,9 @@
+{
+  "digest": "3a8e4fa5fcc964952319395060246e7f7a4d5eefe844e98c0f2c7d8496378ff0",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:21.8370016+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Corte no dedo causado por faca, com sangramento que parou com pressão; a lesão tem sangramento controlado e deve ser avaliada em breve para verificar necessidade de limpeza e sutura.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Corte no dedo com faca de cozinha, parou de sangrar com press\\u00E3o.\"}"
+}

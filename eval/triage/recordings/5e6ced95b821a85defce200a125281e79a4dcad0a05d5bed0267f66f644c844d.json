@@ -1,0 +1,9 @@
+{
+  "digest": "5e6ced95b821a85defce200a125281e79a4dcad0a05d5bed0267f66f644c844d",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:10.9671326+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Paciente relata diarreia de ontem que já passou e pede atestado, sem sintomas de alarme descritos; pode ser atendido na fila regular.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Preciso de atestado, tive diarreia ontem mas j\\u00E1 passou.\"}"
+}

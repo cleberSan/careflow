@@ -1,0 +1,9 @@
+{
+  "digest": "736ec6a884ca9b8f8b275cf4a537d837b4f802f6c8351c6980d601c325fba1bd",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:31.7992394+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Dor torácica em aperto irradiando para o braço esquerdo, com início há meia hora, exige avaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor no peito apertando que vai para o bra\\u00E7o esquerdo, come\\u00E7ou h\\u00E1 meia hora.\"}"
+}

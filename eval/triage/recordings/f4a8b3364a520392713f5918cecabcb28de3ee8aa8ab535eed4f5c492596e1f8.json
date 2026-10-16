@@ -1,0 +1,9 @@
+{
+  "digest": "f4a8b3364a520392713f5918cecabcb28de3ee8aa8ab535eed4f5c492596e1f8",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:19.3756232+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Vômitos repetidos desde a manhã, mas o paciente consegue ingerir água; sugere avaliação em breve, sem sinais de gravidade relatados.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"V\\u00F4mito tr\\u00EAs vezes desde a manh\\u00E3, consigo beber \\u00E1gua.\"}"
+}

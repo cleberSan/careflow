@@ -1,0 +1,9 @@
+{
+  "digest": "b7ba3f81d2bc825f83591827221181f88fa5770cb6139e5eff0b7b208aac6e85",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:20.5321576+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Tontura ao levantar da cama nos últimos dias, em paciente de 60 a 79 anos; sintoma recorrente sem outros sinais de alarme relatados, mas que merece avaliação em breve.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Tontura ao levantar da cama nos \\u00FAltimos dias.\"}"
+}

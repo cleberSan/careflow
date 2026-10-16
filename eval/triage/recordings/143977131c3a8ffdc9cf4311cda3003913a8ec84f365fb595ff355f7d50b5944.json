@@ -1,0 +1,9 @@
+{
+  "digest": "143977131c3a8ffdc9cf4311cda3003913a8ec84f365fb595ff355f7d50b5944",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:01.7224992+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Paciente adulto relata tosse há três dias, sem outros sintomas graves descritos; recomenda-se avaliação em atendimento programado, com revisão por profissional de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Meu nome \\u00E9 [nome], CPF [cpf], estou com tosse h\\u00E1 tr\\u00EAs dias.\"}"
+}

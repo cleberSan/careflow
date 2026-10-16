@@ -1,0 +1,9 @@
+{
+  "digest": "268d9002660f3120fafae61b834747e4a8cdff226c0263824d1465f441453f2c",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:32.9896153+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Falta de ar forte com dificuldade para falar frases inteiras indica comprometimento respiratório grave, exigindo avaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Falta de ar forte, n\\u00E3o consigo falar frases inteiras.\"}"
+}

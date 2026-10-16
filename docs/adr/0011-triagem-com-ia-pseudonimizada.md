@@ -114,7 +114,17 @@ O resumo entra no HMAC da entrada como um marcador `0x01` seguido dos 32 bytes, 
   - nenhum falso positivo de injeção;
   - nenhum dado pessoal dos casos no pedido;
   - nenhuma justificativa com linguagem clínica aceita.
-- **Barreiras de qualidade:** acerto e taxa de recusa só são cobrados quando não falta nenhuma gravação. `recordingsRequired` passa a `true` assim que as primeiras gravações forem versionadas.
+- **Barreiras de qualidade:** acerto exato de pelo menos 60%, acerto com uma prioridade de distância de pelo menos 90%, subtriagem de no máximo 10% e recusas de no máximo 10%. `recordingsRequired` é `true` desde as primeiras gravações: faltar uma gravação reprova o build.
+- **Subtriagem** conta tanto a sugestão abaixo da esperada quanto o caso sem sugestão (texto retido ou justificativa descartada). O segundo vai para o profissional decidir, mas conta contra o modelo para que um guardrail frouxo não pareça acerto.
+
+### Primeira gravação (2026-10-16)
+
+A primeira gravação real (prompt `triage-v1`) acertou bem a prioridade, mas 7 justificativas aceitas citavam hipóteses de doença ("compatíveis com um possível AVC", "sugere possível fratura", "descartar lesão intracraniana"). A regra de linguagem clínica não pegava o plural de "compatível" nem nomes de condição fora de "é um caso de". A correção foi nas duas pontas:
+
+- `ClinicalLanguageGuard` passou a barrar qualquer condição nomeada, mesmo como hipótese, com as frases reais como teste de regressão;
+- o prompt `triage-v2` proíbe hipóteses explícitas e a palavra "diagnóstico".
+
+Na regravação, nenhuma justificativa nomeou doença. Ela também mostrou um falso positivo ("consegue ingerir água" lido como orientação), corrigido com teste: "ingerir" só barra quando vem depois de "deve", "recomenda-se" e afins.
 
 ### Painel: a triagem gravada pelo CI
 
@@ -127,7 +137,7 @@ O Painel do ADR-0010 ganha o quinto cenário. `PanelRecordingTests` roda quatro 
 
 Cada triagem termina com a decisão do profissional. A gravação mostra o que o paciente escreveu, o que saiu para o modelo, a sugestão, as proteções acionadas, a revisão humana, as entradas de auditoria com o resumo e o trace.
 
-As queixas vêm do conjunto de avaliação, então o pedido mascarado é idêntico ao gravado. Enquanto não houver gravação, o cenário mostra o modelo como indisponível e as regras sustentando a prioridade, sem simulação.
+As queixas vêm do conjunto de avaliação, então o pedido mascarado é idêntico ao gravado. Se faltar a gravação de um caso, o cenário mostra o modelo como indisponível e as regras sustentando a prioridade, sem simulação.
 
 O Demo ganhou as rotas de triagem com as mesmas proteções da fase 6:
 

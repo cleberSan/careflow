@@ -1,0 +1,9 @@
+{
+  "digest": "a0ae53704f2bac2d1054c3a07dd3648a42f8f047fa520870d15142cd8467232c",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:02.5619662+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Tosse seca e coriza há três dias, sem febre relatada, em paciente de 18 a 39 anos; sintomas leves sem sinais de gravidade, adequados para atendimento de rotina.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Tosse seca e coriza h\\u00E1 tr\\u00EAs dias, sem febre.\"}"
+}

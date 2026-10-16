@@ -1,0 +1,9 @@
+{
+  "digest": "99b1f0bbc5a35a6601a19246a9a203d59b5a35aff3e88e7e8a4c6d7370bf4b6d",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:39.728198+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Sangramento intenso em corte na perna que não para, exigindo avaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Sangramento intenso no corte da perna que n\\u00E3o para.\"}"
+}

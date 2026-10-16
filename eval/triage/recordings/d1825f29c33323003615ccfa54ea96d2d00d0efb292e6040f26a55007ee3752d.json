@@ -1,0 +1,9 @@
+{
+  "digest": "d1825f29c33323003615ccfa54ea96d2d00d0efb292e6040f26a55007ee3752d",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:26.8341247+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Crise de asma que melhorou só um pouco com a bombinha indica necessidade de avaliação rápida pela equipe, pois a resposta incompleta ao broncodilatador exige reavaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Crise de asma, a bombinha ajudou s\\u00F3 um pouco.\"}"
+}

@@ -1,0 +1,9 @@
+{
+  "digest": "32b73bfb036165d8cc7542df5eea27a6ae2d780ef6657b60956269e64c8000e2",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:30.5931485+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Febre há quatro dias com sonolência excessiva em criança de 2 a 11 anos exige avaliação médica rápida, por ser sinal de possível comprometimento do estado geral.\"}",
+  "payload": "{\"faixaEtaria\":\"2-11\",\"queixa\":\"Minha filha est\\u00E1 com febre h\\u00E1 quatro dias e muito sonolenta.\"}"
+}

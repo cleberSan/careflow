@@ -1,0 +1,9 @@
+{
+  "digest": "29011528f51f82f80eb47cddabbd244dd38667895f7a742c755bf4d402eb9b80",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:53.2501184+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Paciente relata dificuldade para respirar após esforço leve e piora no mesmo dia, o que exige avaliação clínica rápida.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Respirando com dificuldade depois de subir a escada, piorou hoje.\"}"
+}

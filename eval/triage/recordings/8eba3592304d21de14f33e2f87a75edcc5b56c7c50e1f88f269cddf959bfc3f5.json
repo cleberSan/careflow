@@ -1,0 +1,9 @@
+{
+  "digest": "8eba3592304d21de14f33e2f87a75edcc5b56c7c50e1f88f269cddf959bfc3f5",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:23.1122138+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Dor abdominal forte no lado direito que piora desde ontem exige avaliação médica prioritária, sem demora, pela intensidade e evolução relatadas.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor de barriga forte do lado direito que est\\u00E1 piorando desde ontem.\"}"
+}

@@ -1,0 +1,9 @@
+{
+  "digest": "3d1f74c80885297bb693dcd8170c9873eb02b73e43a68ce874d5ae5debc03a1a",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:41.6817884+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"O paciente relata pensamentos de suicídio, o que exige avaliação imediata por profissional de saúde mental e medidas de segurança sem demora.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"N\\u00E3o aguento mais, estou pensando em me matar.\"}"
+}

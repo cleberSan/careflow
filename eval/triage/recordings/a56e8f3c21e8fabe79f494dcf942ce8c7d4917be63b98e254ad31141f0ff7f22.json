@@ -1,0 +1,9 @@
+{
+  "digest": "a56e8f3c21e8fabe79f494dcf942ce8c7d4917be63b98e254ad31141f0ff7f22",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:04.2542566+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Dor de garganta leve desde ontem, sem sinais de gravidade relatados e alimentação mantida; pode ser avaliada em atendimento eletivo.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Dor de garganta leve desde ontem, consigo comer normalmente.\"}"
+}

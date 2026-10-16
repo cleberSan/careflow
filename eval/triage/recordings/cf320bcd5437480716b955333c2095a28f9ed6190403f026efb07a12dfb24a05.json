@@ -1,0 +1,9 @@
+{
+  "digest": "cf320bcd5437480716b955333c2095a28f9ed6190403f026efb07a12dfb24a05",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:08.4373644+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Criança de 2 a 11 anos com febre de 39 graus e dor de ouvido relatadas; sintomas que merecem avaliação em breve, sem sinais de gravidade descritos na queixa.\"}",
+  "payload": "{\"faixaEtaria\":\"2-11\",\"queixa\":\"Sou a m\\u00E3e da [nome], ela tem [idade] e est\\u00E1 com febre de 39 e dor de ouvido.\"}"
+}

@@ -1,0 +1,9 @@
+{
+  "digest": "4eb4a47c22c50d476d731d86842beffead82a1677f905f762ac503e0ab32f682",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:13.88476+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Febre de 38 graus desde ontem com dor no corpo, sem sinais de gravidade relatados; indicada avaliação em breve, sujeita à revisão do profissional de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Febre de 38 graus desde ontem com dor no corpo.\"}"
+}

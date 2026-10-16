@@ -1,0 +1,9 @@
+{
+  "digest": "b5bd041806a00b1a467ed7401a0a1293c025cf0faf0e9fa851fd1caa49124576",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:38.820567+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Relato de convulsão em criança de 2 a 11 anos, ocorrida agora há pouco; exige avaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"2-11\",\"queixa\":\"Meu filho teve uma convuls\\u00E3o agora h\\u00E1 pouco.\"}"
+}

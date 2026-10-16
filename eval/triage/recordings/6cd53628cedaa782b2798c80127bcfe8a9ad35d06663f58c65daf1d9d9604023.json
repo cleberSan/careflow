@@ -1,0 +1,9 @@
+{
+  "digest": "6cd53628cedaa782b2798c80127bcfe8a9ad35d06663f58c65daf1d9d9604023",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:50.7364243+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Paciente de 60-79 anos relata sangue nas fezes desde ontem; sintoma com sangramento que exige avaliação médica em breve, sem sinais de instabilidade relatados.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Sangue nas fezes desde ontem.\"}"
+}

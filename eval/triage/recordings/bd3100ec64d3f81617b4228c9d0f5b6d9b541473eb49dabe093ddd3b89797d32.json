@@ -1,0 +1,9 @@
+{
+  "digest": "bd3100ec64d3f81617b4228c9d0f5b6d9b541473eb49dabe093ddd3b89797d32",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:07.3160208+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Paciente relata dor no peito forte, recorrente e ainda em curso, o que exige avaliação imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"A [nome], [data] senti dor no peito forte e de novo agora.\"}"
+}

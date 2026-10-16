@@ -1,0 +1,9 @@
+{
+  "digest": "081394b309ad8c24500ea19ebc193b5b75ec6f2c171369fe931d3e2b878d78c4",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:08.6115639+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Relata espinhas no rosto que pioraram no último mês, sem sintomas de gravidade relatados; avaliação pode ser feita de forma eletiva.\"}",
+  "payload": "{\"faixaEtaria\":\"12-17\",\"queixa\":\"Espinhas no rosto que pioraram este m\\u00EAs.\"}"
+}

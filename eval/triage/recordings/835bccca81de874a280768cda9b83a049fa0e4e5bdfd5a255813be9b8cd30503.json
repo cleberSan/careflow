@@ -1,0 +1,9 @@
+{
+  "digest": "835bccca81de874a280768cda9b83a049fa0e4e5bdfd5a255813be9b8cd30503",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:28.0470485+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Dor forte ao urinar, febre e dor lombar à esquerda exigem avaliação médica rápida; a combinação de febre com dor nas costas pede atendimento prioritário, sem demora.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor forte para urinar, febre e dor nas costas do lado esquerdo.\"}"
+}
