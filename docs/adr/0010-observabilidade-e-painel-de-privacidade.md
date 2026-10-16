@@ -1,7 +1,9 @@
 # ADR-0010: Observabilidade ponta a ponta e Painel de Privacidade e Resiliência
 
-- Status: aceito
+- Status: aceito; hospedagem substituída pelo ADR-0013
 - Data: 2026-10-15
+
+> Atualização (fase 9): o backend do Painel passou a ser hospedado numa VM Always Free da Oracle, com o replay como fallback automático, e a sessão do Painel virou um token no cabeçalho `Authorization` em vez de cookie. A decisão e os riscos novos estão no [ADR-0013](0013-demonstracao-hospedada-na-oracle.md). O resto deste ADR continua valendo.
 
 ## Contexto
 

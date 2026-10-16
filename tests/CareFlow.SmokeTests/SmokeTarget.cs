@@ -69,9 +69,12 @@ internal sealed class SmokeTarget : IDisposable
     public HttpClient Client { get; }
 
     /// <summary>O alvo configurado, ou nada (e o teste é pulado) sem <c>CAREFLOW_SMOKE_URL</c>.</summary>
-    public static SmokeTarget? FromEnvironment()
+    public static SmokeTarget? FromEnvironment() => FromSettings(Environment.GetEnvironmentVariable);
+
+    /// <summary>Lê a configuração por <paramref name="read"/>, para os testes da própria leitura não mexerem no ambiente.</summary>
+    internal static SmokeTarget? FromSettings(Func<string, string?> read)
     {
-        var url = Environment.GetEnvironmentVariable("CAREFLOW_SMOKE_URL");
+        var url = read("CAREFLOW_SMOKE_URL");
         if (string.IsNullOrWhiteSpace(url))
         {
             return null;
@@ -83,7 +86,7 @@ internal sealed class SmokeTarget : IDisposable
             throw new InvalidOperationException("CAREFLOW_SMOKE_URL precisa ser https.");
         }
 
-        var origin = Environment.GetEnvironmentVariable("CAREFLOW_SMOKE_ORIGIN");
+        var origin = read("CAREFLOW_SMOKE_ORIGIN");
         if (string.IsNullOrWhiteSpace(origin))
         {
             throw new InvalidOperationException("Defina CAREFLOW_SMOKE_ORIGIN com a origem do site.");
@@ -92,8 +95,8 @@ internal sealed class SmokeTarget : IDisposable
         return new SmokeTarget(
             baseAddress,
             origin.TrimEnd('/'),
-            Environment.GetEnvironmentVariable("CAREFLOW_SMOKE_CONNECT"),
-            Environment.GetEnvironmentVariable("CAREFLOW_SMOKE_CA"));
+            read("CAREFLOW_SMOKE_CONNECT"),
+            read("CAREFLOW_SMOKE_CA"));
     }
 
     public static SmokeTarget Require()

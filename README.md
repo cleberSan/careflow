@@ -34,7 +34,8 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [x] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md))
 - [x] **Fase 7:** Triagem com IA sobre dados pseudonimizados, guardrails e revisão humana ([ADR-0011](docs/adr/0011-triagem-com-ia-pseudonimizada.md))
 - [x] **Fase 8:** Direitos do titular de ponta a ponta e Bundle HL7 FHIR R4 ([ADR-0012](docs/adr/0012-direitos-do-titular-e-fhir.md))
-- [ ] **Fase 9:** Testes de carga, IaC e deploy com canary
+- [x] **Fase 9:** demonstração hospedada de graça numa VM da Oracle, com HTTPS, proteção contra abuso, deploy aprovado com rollback e backup com restauração ensaiada ([ADR-0013](docs/adr/0013-demonstracao-hospedada-na-oracle.md), [passo a passo](docs/operacao/demonstracao-hospedada.md))
+- [ ] **Próximas:** testes de carga e deploy gradual
 
 A fase 1 é o site do portfólio, no repositório [portfolio-web](https://github.com/cleberSan/portfolio-web).
 

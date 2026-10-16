@@ -94,10 +94,28 @@ jobs:
           sudo careflow-deploy demo on
           wait_for '"available":true'
 
-      - name: Backup e ensaio de restauração
+      - name: Backup, ensaio e restauração com reaplicação da eliminação
+        env:
+          REHEARSAL_STATE: ${{ runner.temp }}/rehearsal.env
         run: |
+          # Um paciente numa clínica fora do Painel, com chave no cofre; o backup sai com ela.
+          sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh seed
           sudo CAREFLOW_BACKUP_DIR="$RUNNER_TEMP/backups" careflow-backup --local
-          sudo careflow-restore-drill "$(sudo ls -d "$RUNNER_TEMP"/backups/* | tail -n1)"
+          backup="$(sudo ls -d "$RUNNER_TEMP"/backups/* | tail -n1)"
+          sudo careflow-restore-drill "$backup"
+          # A eliminação acontece depois do backup: restaurar traz a chave de volta e o script precisa reaplicá-la.
+          sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh erase
+          sudo CAREFLOW_COMPOSE_OVERRIDE=compose.ci.yaml CAREFLOW_SKIP_PULL=1 CAREFLOW_HEALTH_INSECURE=1 \
+            careflow-restore "$backup" --confirm | tee "$RUNNER_TEMP/restore.log"
+          grep -q 'chaves de pacientes já eliminados que voltaram com o backup: 1' "$RUNNER_TEMP/restore.log"
+          grep -q '1 eliminações reaplicadas' "$RUNNER_TEMP/restore.log"
+          grep -q 'cadeia da auditoria íntegra em 1 clínicas' "$RUNNER_TEMP/restore.log"
+
+      - name: Fumaça de novo depois da restauração
+        run: |
+          CAREFLOW_SMOKE_URL=https://demo.careflow.test CAREFLOW_SMOKE_ORIGIN=https://site.careflow.test \
+          CAREFLOW_SMOKE_CONNECT=127.0.0.1:443 CAREFLOW_SMOKE_CA="$RUNNER_TEMP/caddy-root.crt" \
+            dotnet test --project tests/CareFlow.SmokeTests -c Release
 
       - name: Logs dos containers (só na falha)
         if: failure()
