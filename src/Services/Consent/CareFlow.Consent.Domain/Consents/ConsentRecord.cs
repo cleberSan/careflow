@@ -128,6 +128,13 @@ public sealed class ConsentRecord
             return Result.Failure(ConsentErrors.InvalidLegalBasis);
         }
 
+        // A triagem por IA é opcional para o cuidado: não cabe em tutela da saúde e trata dado sensível, então só
+        // vale com consentimento específico e destacado (LGPD art. 11, I), sempre revogável.
+        if (purpose == ConsentPurpose.AiTriage && legalBasis != LegalBasis.SpecificConsent)
+        {
+            return Result.Failure(ConsentErrors.LegalBasisNotAllowedForPurpose);
+        }
+
         return IsTermVersion(termVersion) ? Result.Success() : Result.Failure(ConsentErrors.InvalidTermVersion);
     }
 

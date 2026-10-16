@@ -38,6 +38,10 @@ internal sealed class DemoOptions
     [Range(1, 20)]
     public int MaxBookingsPerSession { get; set; } = 5;
 
+    /// <summary>Triagens por sessão: cada uma pode virar uma chamada ao modelo, então o teto também limita custo.</summary>
+    [Range(1, 20)]
+    public int MaxTriagesPerSession { get; set; } = 6;
+
     [Range(typeof(TimeSpan), "00:00:10", "00:15:00")]
     public TimeSpan WhatsAppFaultDuration { get; set; } = TimeSpan.FromMinutes(2);
 
@@ -76,6 +80,9 @@ internal sealed class DemoServiceAddresses
 
     [Required]
     public Uri? Audit { get; set; }
+
+    [Required]
+    public Uri? Triage { get; set; }
 }
 
 internal sealed class DemoRateLimits

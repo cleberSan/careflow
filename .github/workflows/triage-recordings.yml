@@ -1,0 +1,88 @@
+name: Gravar respostas da triagem
+
+# Chama o Claude de verdade para os casos de eval/triage/cases.json e publica as respostas gravadas como artefato
+# (ADR-0011). O CI e o Painel só reproduzem essas gravações, sem custo. Roda à mão (workflow_dispatch) ou quando
+# alguém com permissão põe o rótulo "gravar-triagem" num PR deste repositório; nunca em PR de fork.
+#
+# Teto de gasto: no máximo max_calls chamadas, cada uma limitada a 2.048 tokens de saída e ~2.000 de entrada.
+# Com o Claude Haiku 5.5 (US$ 0,10 / 0,50 por milhão de tokens), 80 chamadas custam no máximo ~US$ 0,10.
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: Máximo de chamadas ao modelo nesta gravação
+        required: true
+        default: "80"
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triage-recordings-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  record:
+    name: Gravar respostas do modelo
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'gravar-triagem' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Conferir a chave
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Crie o secret ANTHROPIC_API_KEY no repositório antes de gravar."
+            exit 1
+          fi
+
+      - name: Restore e build
+        run: |
+          dotnet restore tests/CareFlow.Triage.Evaluation --locked-mode
+          dotnet build tests/CareFlow.Triage.Evaluation -c Release --no-restore
+
+      - name: Gravar (chamadas reais, com teto)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CAREFLOW_TRIAGE_EVAL_MODEL: anthropic
+          CAREFLOW_TRIAGE_MAX_CALLS: ${{ github.event.inputs.max_calls || '80' }}
+          CAREFLOW_TRIAGE_EVALUATION: ${{ github.workspace }}/triage-evaluation/triage-evaluation.json
+        # A avaliação pode reprovar (acerto abaixo do limite); as gravações saem mesmo assim, para análise.
+        run: dotnet test --project tests/CareFlow.Triage.Evaluation -c Release --no-build || echo "::warning::A avaliação reprovou; confira o relatório."
+
+      - name: Publicar gravações
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-recordings
+          path: eval/triage/recordings/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publicar relatório
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-evaluation-live
+          path: triage-evaluation/
+          retention-days: 30
+          if-no-files-found: error

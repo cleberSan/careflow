@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 
+using CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens;
 using CareFlow.Notifications.Api.Contacts;
 using CareFlow.Notifications.IntegrationTests.Infrastructure;
 using CareFlow.Testing;
@@ -48,7 +49,7 @@ public sealed class VaultContactDirectoryTests(NotificationsApiFixture api)
         var validation = await new JsonWebTokenHandler().ValidateTokenAsync(authorization!["Bearer ".Length..], new TokenValidationParameters
         {
             ValidIssuer = ServiceTokenOptions.DefaultIssuer,
-            ValidAudience = ServiceTokenIssuer.VaultAudience,
+            ValidAudience = VaultContactDirectory.Grant.Audience,
             IssuerSigningKey = new ECDsaSecurityKey(api.Vault.SigningKey),
             ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
         });
@@ -137,7 +138,7 @@ public sealed class VaultContactDirectoryTests(NotificationsApiFixture api)
     {
         // Arrange
         var time = new ManualTime(new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.Zero));
-        using var issuer = new ServiceTokenIssuer(Options.Create(new ServiceTokenOptions { PrivateKey = api.Vault.PrivateKeyBase64 }), time);
+        using var issuer = new ServiceTokenIssuer(Options.Create(new ServiceTokenOptions { PrivateKey = api.Vault.PrivateKeyBase64 }), VaultContactDirectory.Grant, time);
 
         // Act
         var first = issuer.TokenFor(_clinic);
@@ -161,7 +162,7 @@ public sealed class VaultContactDirectoryTests(NotificationsApiFixture api)
 
         // Act / Assert
         Assert.All(invalid, key => Assert.Throws<InvalidOperationException>(
-            () => new ServiceTokenIssuer(Options.Create(new ServiceTokenOptions { PrivateKey = key }), TimeProvider.System)));
+            () => new ServiceTokenIssuer(Options.Create(new ServiceTokenOptions { PrivateKey = key }), VaultContactDirectory.Grant, TimeProvider.System)));
     }
 
     [Fact]

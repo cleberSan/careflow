@@ -2,14 +2,16 @@ using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
-namespace CareFlow.Notifications.Api.Contacts;
+namespace CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens;
 
 /// <summary>Emissor interno local de tokens de serviço. Chave privada P-256 (PKCS#8 em Base64) de user-secrets ou do ambiente.</summary>
-internal sealed class ServiceTokenOptions
+public sealed class ServiceTokenOptions
 {
     public const string SectionName = "ServiceTokens:Local";
     public const string DefaultIssuer = "careflow-internal-local";
@@ -24,30 +26,35 @@ internal sealed class ServiceTokenOptions
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(5);
 }
 
-/// <summary>
-/// Token curto, por clínica, só com o escopo de leitura de contato e só para o cofre. O cofre valida com a chave
-/// pública e aceita esse token apenas no endpoint de contato. Recusado em produção (client credentials do IdP na
-/// fase 9). Cada clínica tem o seu token em cache até um minuto antes de expirar.
-/// </summary>
-internal sealed class ServiceTokenIssuer : IDisposable
-{
-    public const string Subject = "careflow-notifications";
-    public const string VaultAudience = "careflow-patient-vault";
-    public const string ContactReadScope = "vault.contact.read";
+/// <summary>Quem pede (<see cref="Subject"/>), para qual serviço (<see cref="Audience"/>) e com qual escopo, um só.</summary>
+public sealed record ServiceTokenGrant(string Subject, string Audience, string Scope);
 
+/// <summary>
+/// Token curto, por clínica, com um único escopo e uma única audiência. O serviço de destino valida com a
+/// chave pública e aceita esse token só na rota daquele escopo. Recusado em produção (client credentials do
+/// IdP na fase 9). Cada clínica tem o seu token em cache até um minuto antes de expirar.
+/// </summary>
+public sealed class ServiceTokenIssuer : IDisposable
+{
     private static readonly TimeSpan RefreshMargin = TimeSpan.FromMinutes(1);
 
     private readonly ECDsa _key;
     private readonly SigningCredentials _credentials;
     private readonly ServiceTokenOptions _options;
+    private readonly ServiceTokenGrant _grant;
     private readonly TimeProvider _time;
     private readonly JsonWebTokenHandler _handler = new();
     private readonly ConcurrentDictionary<Guid, (string Token, DateTimeOffset RefreshAt)> _cache = new();
 
-    public ServiceTokenIssuer(IOptions<ServiceTokenOptions> options, TimeProvider time)
+    public ServiceTokenIssuer(IOptions<ServiceTokenOptions> options, ServiceTokenGrant grant, TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(grant);
+        ArgumentException.ThrowIfNullOrWhiteSpace(grant.Subject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(grant.Audience);
+        ArgumentException.ThrowIfNullOrWhiteSpace(grant.Scope);
         _options = options.Value;
+        _grant = grant;
         _time = time;
         _key = LoadPrivateKey(_options.PrivateKey);
 
@@ -56,6 +63,8 @@ internal sealed class ServiceTokenIssuer : IDisposable
         var securityKey = new ECDsaSecurityKey(_key) { CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false } };
         _credentials = new SigningCredentials(securityKey, SecurityAlgorithms.EcdsaSha256);
     }
+
+    public ServiceTokenGrant Grant => _grant;
 
     public string TokenFor(Guid tenantId)
     {
@@ -74,15 +83,15 @@ internal sealed class ServiceTokenIssuer : IDisposable
         var token = _handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = _options.Issuer,
-            Audience = VaultAudience,
+            Audience = _grant.Audience,
             IssuedAt = now.UtcDateTime,
             NotBefore = now.UtcDateTime,
             Expires = expires.UtcDateTime,
             Claims = new Dictionary<string, object>
             {
-                ["sub"] = Subject,
+                ["sub"] = _grant.Subject,
                 ["tenant_id"] = tenantId.ToString(),
-                ["scope"] = ContactReadScope,
+                ["scope"] = _grant.Scope,
                 ["jti"] = Guid.NewGuid().ToString("N"),
             },
             SigningCredentials = _credentials,
@@ -113,5 +122,30 @@ internal sealed class ServiceTokenIssuer : IDisposable
 
         ecdsa.Dispose();
         throw new InvalidOperationException($"{ServiceTokenOptions.SectionName}:PrivateKey precisa ser uma chave P-256.");
+    }
+}
+
+public static class ServiceTokenServiceCollectionExtensions
+{
+    /// <summary>Registra o emissor local com a configuração de <see cref="ServiceTokenOptions.SectionName"/>. Recusado em produção.</summary>
+    public static IServiceCollection AddLocalServiceTokens(this IServiceCollection services, IHostEnvironment environment, ServiceTokenGrant grant)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(grant);
+        if (environment.IsProduction())
+        {
+            throw new InvalidOperationException(
+                "O emissor interno local de tokens de serviço não pode ser usado em produção. Use client credentials do IdP.");
+        }
+
+        services.AddOptions<ServiceTokenOptions>()
+            .BindConfiguration(ServiceTokenOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton(provider => new ServiceTokenIssuer(
+            provider.GetRequiredService<IOptions<ServiceTokenOptions>>(),
+            grant,
+            provider.GetRequiredService<TimeProvider>()));
+        return services;
     }
 }

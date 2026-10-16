@@ -31,7 +31,7 @@ public sealed class DistributedTraceTests(CareFlowSystem system)
             () => api.NotificationsAsync(appointment),
             list => list.Any(n => n.Kind == "Confirmation" && n.Status == "Sent"),
             description: "confirmação enviada");
-        var trace = await WaitForTraceAsync(traceId, spans => spans.Any(s => s.Name == "deliver notification" && s.Tag("careflow.notification.delivered_via") == "sms"));
+        var trace = await WaitForTraceAsync(traceId, spans => spans.Any(s => s.Name == "deliver notification" && s.Tag("careflow.notification.delivered_via") == "sms") && Orphans(spans).Length == 1);
 
         // Assert: os passos esperados, em ordem causal, no mesmo trace.
         var request = Single(trace, s => s.Kind == ActivityKind.Server && s.Tag("http.route")?.TrimEnd('/') == "/v1/appointments", "requisição da agenda");
@@ -83,7 +83,9 @@ public sealed class DistributedTraceTests(CareFlowSystem system)
             () => api.NotificationsAsync(appointment),
             list => list.Any(n => n.Kind == "Cancellation" && n.Status == "Sent"),
             description: "aviso de cancelamento enviado");
-        var trace = await WaitForTraceAsync(traceId, spans => spans.Any(s => s.Name == "deliver notification" && s.Tag("careflow.notification.delivered_via") == "sms"));
+        // Espera também os spans pais terminarem: um consumidor (auditoria, triagem) pode ainda estar processando
+        // quando o aviso sai, e o span de processamento só é exportado ao fim, depois dos filhos de banco.
+        var trace = await WaitForTraceAsync(traceId, spans => spans.Any(s => s.Name == "deliver notification" && s.Tag("careflow.notification.delivered_via") == "sms") && Orphans(spans).Length == 1);
 
         // Assert: Consent → agenda cancela → Notifications avisa, e a auditoria recebe tudo, num trace só.
         var revoke = Single(trace, s => s.Kind == ActivityKind.Server && s.Tag("http.route") == "/v1/patients/{patientRef:guid}/consents/{purpose}/revoke", "revogação no Consent");
@@ -156,10 +158,15 @@ public sealed class DistributedTraceTests(CareFlowSystem system)
         return matches[0];
     }
 
-    private static void AssertConnected(IReadOnlyList<ExportedSpan> trace)
+    private static ExportedSpan[] Orphans(IReadOnlyList<ExportedSpan> trace)
     {
         var ids = trace.Select(s => s.SpanId).ToHashSet(StringComparer.Ordinal);
-        var orphans = trace.Where(s => s.ParentSpanId is not null && !ids.Contains(s.ParentSpanId)).ToArray();
+        return [.. trace.Where(s => s.ParentSpanId is not null && !ids.Contains(s.ParentSpanId))];
+    }
+
+    private static void AssertConnected(IReadOnlyList<ExportedSpan> trace)
+    {
+        var orphans = Orphans(trace);
 
         // A raiz é a requisição do cliente de teste: o pai dela (o traceparent enviado) não é um span exportado.
         Assert.True(orphans.Length == 1, $"Spans sem pai no trace: {string.Join(" / ", orphans)}");

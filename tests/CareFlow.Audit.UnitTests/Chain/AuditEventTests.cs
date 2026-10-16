@@ -110,4 +110,32 @@ public sealed class AuditEventTests
         Assert.True(accepted.IsSuccess);
         Assert.Equal(AuditErrors.InvalidActor, rejected.Error);
     }
+
+    [Fact]
+    public void Create_WithContentDigest_KeepsIt()
+    {
+        // Arrange
+        var digest = new string('a', 64);
+
+        // Act
+        var result = AuditEvent.Create(Guid.NewGuid(), Guid.NewGuid(), Now, "triage", "careflow-triage", "triage.suggested.model", "patient", Guid.NewGuid(), digest);
+
+        // Assert
+        Assert.Equal(digest, result.Value.ContentDigest);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void Create_WithMalformedContentDigest_Fails(string digest)
+    {
+        // Act
+        var result = AuditEvent.Create(Guid.NewGuid(), Guid.NewGuid(), Now, "triage", "careflow-triage", "triage.suggested.model", "patient", Guid.NewGuid(), digest);
+
+        // Assert
+        Assert.Equal(AuditErrors.InvalidContentDigest, result.Error);
+    }
 }

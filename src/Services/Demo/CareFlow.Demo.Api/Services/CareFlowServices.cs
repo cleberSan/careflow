@@ -13,11 +13,12 @@ internal sealed record CareFlowService(string Name, string Audience)
     public static readonly CareFlowService Scheduling = new("scheduling", "careflow-scheduling");
     public static readonly CareFlowService Notifications = new("notifications", "careflow-notifications");
     public static readonly CareFlowService Audit = new("audit", "careflow-audit");
+    public static readonly CareFlowService Triage = new("triage", "careflow-triage");
 
-    public static IReadOnlyList<CareFlowService> All { get; } = [Vault, Consent, Scheduling, Notifications, Audit];
+    public static IReadOnlyList<CareFlowService> All { get; } = [Vault, Consent, Scheduling, Notifications, Audit, Triage];
 
     /// <summary>Os que guardam dados da clínica e têm a limpeza do demo (a auditoria é só de inserção).</summary>
-    public static IReadOnlyList<CareFlowService> Purgeable { get; } = [Vault, Consent, Scheduling, Notifications];
+    public static IReadOnlyList<CareFlowService> Purgeable { get; } = [Vault, Consent, Scheduling, Notifications, Triage];
 }
 
 /// <summary>Resposta inesperada de um serviço (fora do ar, configuração errada). Vira 502 sem detalhes.</summary>
@@ -30,7 +31,7 @@ internal sealed class UpstreamException(string service, HttpStatusCode? status, 
 }
 
 /// <summary>
-/// Chamadas do Demo aos cinco serviços, sempre em nome da clínica sintética da sessão e com o menor escopo de
+/// Chamadas do Demo aos seis serviços, sempre em nome da clínica sintética da sessão e com o menor escopo de
 /// cada operação. Só os campos que o Painel mostra são lidos das respostas.
 /// </summary>
 internal sealed class CareFlowServices(IHttpClientFactory clients)
@@ -143,6 +144,55 @@ internal sealed class CareFlowServices(IHttpClientFactory clients)
         using var response = await SendAsync(CareFlowService.Audit, clinic, ["audit.read"], HttpMethod.Get, "v1/audit/verification", null, cancellationToken).ConfigureAwait(false);
         EnsureSuccess(CareFlowService.Audit, response);
         return await ReadAsync<ChainVerification>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Envia a queixa para a triagem. POST não é repetido pelo pipeline de resiliência: uma repetição criaria outra
+    /// triagem e poderia chamar o modelo duas vezes. Queixa recusada (400) e limite da clínica (429) voltam como
+    /// recusa com o código do serviço; o resto é falha do serviço.
+    /// </summary>
+    public async Task<TriageOutcome> SubmitTriageAsync(Guid clinic, Guid patientRef, string? complaint, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Triage, clinic, ["triage.submit"], HttpMethod.Post, "v1/triages",
+            JsonContent.Create(new { PatientRef = patientRef, Complaint = complaint }, options: Json),
+            cancellationToken).ConfigureAwait(false);
+        return await TriageOutcomeAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Confirma ou corrige a sugestão, com o escopo de profissional (<c>triage.review</c>).</summary>
+    public async Task<TriageOutcome> ReviewTriageAsync(Guid clinic, Guid triageId, string? decision, string? priority, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Triage, clinic, ["triage.review"], HttpMethod.Post, $"v1/triages/{triageId}/review",
+            JsonContent.Create(new { Decision = decision, Priority = priority }, options: Json),
+            cancellationToken).ConfigureAwait(false);
+        return await TriageOutcomeAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Como o Triage vê o consentimento <c>ai-triage</c> agora: granted, revoked ou unknown.</summary>
+    public async Task<AiConsent> AiConsentAsync(Guid clinic, Guid patientRef, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            CareFlowService.Triage, clinic, ["triage.read"], HttpMethod.Get, $"v1/patients/{patientRef}/ai-consent", null, cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(CareFlowService.Triage, response);
+        return await ReadAsync<AiConsent>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<TriageOutcome> TriageOutcomeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return new TriageOutcome(await ReadAsync<TriageRecord>(response, cancellationToken).ConfigureAwait(false), null, response.StatusCode);
+        }
+
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Conflict or HttpStatusCode.TooManyRequests)
+        {
+            var problem = await ReadAsync<ProblemBody>(response, cancellationToken).ConfigureAwait(false);
+            return new TriageOutcome(null, problem.Code ?? "Triagem.Recusada", response.StatusCode);
+        }
+
+        throw new UpstreamException(CareFlowService.Triage.Name, response.StatusCode);
     }
 
     /// <summary>Registra a clínica na partição isolada; falso se a partição está com outra clínica.</summary>
@@ -259,7 +309,7 @@ internal sealed record DeliveryAttempt(int Round, string Channel, string Outcome
 
 internal sealed record NotificationRecord(Guid Id, string Kind, string Status, int Rounds, string? SentVia, string? NotSentReason, IReadOnlyList<DeliveryAttempt> Attempts);
 
-internal sealed record AuditEntry(long Sequence, DateTimeOffset OccurredAt, string SourceService, string Actor, string Action, string ResourceType, Guid ResourceId);
+internal sealed record AuditEntry(long Sequence, DateTimeOffset OccurredAt, string SourceService, string Actor, string Action, string ResourceType, Guid ResourceId, string? ContentDigest);
 
 internal sealed record AuditPage(IReadOnlyList<AuditEntry> Items);
 
@@ -268,3 +318,34 @@ internal sealed record ChainVerification(bool Intact, long EntriesVerified, long
 internal sealed record ChannelState(string Channel, string? Fault, DateTimeOffset? ExpiresAt, string Circuit);
 
 internal sealed record ClinicChannels(string Partition, IReadOnlyList<ChannelState> Channels);
+
+/// <summary>Triagem aceita (<see cref="Triage"/>) ou recusada pelo serviço (<see cref="RefusalCode"/>, com o status).</summary>
+internal sealed record TriageOutcome(TriageRecord? Triage, string? RefusalCode, HttpStatusCode Status);
+
+/// <summary>Os campos da triagem que o Painel mostra. O revisor (sujeito do token) não é lido.</summary>
+internal sealed record TriageRecord(
+    Guid Id,
+    Guid PatientRef,
+    string Complaint,
+    string AgeBand,
+    string? SentToModel,
+    string? PromptDigest,
+    string? PromptVersion,
+    string? ModelName,
+    string ModelStatus,
+    string? ModelPriority,
+    string? SuggestedPriority,
+    string Source,
+    string? Rationale,
+    IReadOnlyList<string> Guardrails,
+    IReadOnlyList<string> AlarmSigns,
+    IReadOnlyDictionary<string, int> Masks,
+    DateTimeOffset CreatedAt,
+    string Decision,
+    string? FinalPriority,
+    DateTimeOffset? ReviewedAt)
+{
+    public override string ToString() => $"TriageRecord {{ Id = {Id}, *** }}";
+}
+
+internal sealed record AiConsent(string State, long Version);

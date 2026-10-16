@@ -25,11 +25,16 @@ internal sealed class AuditEntryRecord
 
     public Guid ResourceId { get; init; }
 
+    /// <summary>SHA-256 (32 bytes) do conteúdo enviado para fora pelo serviço de origem, quando houver.</summary>
+    public byte[]? ContentDigest { get; init; }
+
     public string KeyId { get; init; } = string.Empty;
 
     public byte[] PreviousHash { get; init; } = [];
 
     public byte[] Hash { get; init; } = [];
+
+    public string? ContentDigestHex => ContentDigest is null ? null : Convert.ToHexStringLower(ContentDigest);
 
     public static AuditEntryRecord From(ChainedEntry entry)
     {
@@ -47,6 +52,7 @@ internal sealed class AuditEntryRecord
             Action = entry.Event.Action,
             ResourceType = entry.Event.ResourceType,
             ResourceId = entry.Event.ResourceId,
+            ContentDigest = entry.Event.ContentDigest is { } digest ? Convert.FromHexString(digest) : null,
             KeyId = entry.KeyId,
             PreviousHash = entry.PreviousHash,
             Hash = entry.Hash,
@@ -59,7 +65,8 @@ internal sealed class AuditEntryRecord
     /// </summary>
     public ChainedEntry? ToChainedEntry()
     {
-        var auditEvent = AuditEvent.Create(TenantId, MessageId, OccurredAt, SourceService, Actor, Action, ResourceType, ResourceId);
+        var auditEvent = AuditEvent.Create(
+            TenantId, MessageId, OccurredAt, SourceService, Actor, Action, ResourceType, ResourceId, ContentDigestHex);
         return auditEvent.IsSuccess
             ? new ChainedEntry(Sequence, auditEvent.Value, RecordedAt, KeyId, PreviousHash, Hash)
             : null;

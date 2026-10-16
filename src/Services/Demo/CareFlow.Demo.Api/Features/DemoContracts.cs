@@ -25,7 +25,8 @@ public sealed record PatientViews(
     IReadOnlyList<NotificationView> Notifications,
     string LogMask);
 
-public sealed record AuditEntryView(long Sequence, DateTimeOffset OccurredAt, string SourceService, string Action, string ResourceType);
+/// <summary><see cref="ContentDigest"/>: SHA-256 do que saiu para o modelo, quando a entrada registra uma divulgação.</summary>
+public sealed record AuditEntryView(long Sequence, DateTimeOffset OccurredAt, string SourceService, string Action, string ResourceType, string? ContentDigest = null);
 
 public sealed record ChainView(bool Intact, long EntriesVerified, long LastSequence);
 
@@ -38,3 +39,42 @@ public sealed record PropagationView(
 public sealed record ChannelView(string Channel, string? Fault, DateTimeOffset? FaultExpiresAt, string Circuit);
 
 public sealed record ChannelsView(string Partition, IReadOnlyList<ChannelView> Channels);
+
+/// <summary>Queixa em texto livre, como o paciente escreveria. Só dados sintéticos.</summary>
+public sealed record TriageRequestBody(string? Complaint)
+{
+    public override string ToString() => "TriageRequestBody { *** }";
+}
+
+/// <summary><c>confirm</c> ou <c>correct</c> (com a prioridade escolhida pelo profissional).</summary>
+public sealed record TriageReviewBody(string? Decision, string? Priority);
+
+/// <summary>
+/// Uma triagem no Painel: o que o paciente escreveu, o que saiu para o modelo (e o resumo que está na trilha), a
+/// sugestão, as proteções acionadas e a revisão humana, com o trace da ação.
+/// </summary>
+public sealed record TriageView(
+    Guid Id,
+    string Complaint,
+    string AgeBand,
+    string? SentToModel,
+    string? PromptDigest,
+    string? PromptVersion,
+    string? ModelName,
+    string ModelStatus,
+    string? ModelPriority,
+    string? SuggestedPriority,
+    string Source,
+    string? Rationale,
+    IReadOnlyList<string> Guardrails,
+    IReadOnlyList<string> AlarmSigns,
+    IReadOnlyDictionary<string, int> Masks,
+    string Decision,
+    string? FinalPriority,
+    DateTimeOffset? ReviewedAt,
+    string TraceId)
+{
+    public override string ToString() => $"TriageView {{ Id = {Id}, *** }}";
+}
+
+public sealed record AiConsentView(string State, long Version);

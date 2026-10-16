@@ -19,7 +19,9 @@ public sealed class LogRedactionTests(ConsentApiFixture api)
         await client.GrantAsync(patient, "scheduling", Specific());
         await client.GrantAsync(patient, "scheduling", Specific());
         await client.GrantAsync(patient, "ai-triage", new("health-protection", "2026-10"));
+        await client.GrantAsync(patient, "ai-triage", Specific());
         await client.RevokeAsync(patient, "ai-triage");
+        await client.GrantAsync(patient, "notifications", new("health-protection", "2026-10"));
         await client.RevokeAsync(patient, "scheduling");
         await client.RevokeAsync(patient, "notifications");
         await client.GrantAsync(patient, "scheduling", new("x", "2026-10"));

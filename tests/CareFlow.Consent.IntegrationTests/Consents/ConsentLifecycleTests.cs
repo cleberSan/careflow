@@ -154,6 +154,8 @@ public sealed class ConsentLifecycleTests(ConsentApiFixture api)
     [InlineData("scheduling", null, "2026-10", "Consentimento.BaseLegalInvalida")]
     [InlineData("scheduling", "consent", "versão 1", "Consentimento.VersaoDoTermoInvalida")]
     [InlineData("scheduling", "consent", null, "Consentimento.VersaoDoTermoInvalida")]
+    [InlineData("ai-triage", "health-protection", "2026-10", "Consentimento.BaseLegalNaoPermitidaParaFinalidade")]
+    [InlineData("ai-triage", "consent", "2026-10", "Consentimento.BaseLegalNaoPermitidaParaFinalidade")]
     public async Task Grant_WithInvalidInput_ReturnsBadRequest(string purpose, string? basis, string? term, string code)
     {
         // Act

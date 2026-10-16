@@ -52,6 +52,33 @@ public sealed class ConsentRecordTests
         Assert.Equal(ConsentErrors.MissingIdentifier, result.Error);
     }
 
+    [Theory]
+    [InlineData(LegalBasis.Consent)]
+    [InlineData(LegalBasis.HealthProtection)]
+    public void Grant_AiTriageWithoutSpecificConsent_Fails(LegalBasis basis)
+    {
+        // Act
+        var result = ConsentRecord.Grant(Guid.NewGuid(), Guid.NewGuid(), ConsentPurpose.AiTriage, basis, "v1", Now);
+
+        // Assert
+        Assert.Equal(ConsentErrors.LegalBasisNotAllowedForPurpose, result.Error);
+    }
+
+    [Fact]
+    public void Regrant_AiTriageWithHealthProtection_FailsAndKeepsCurrentState()
+    {
+        // Arrange
+        var consent = ConsentRecord.Grant(Guid.NewGuid(), Guid.NewGuid(), ConsentPurpose.AiTriage, LegalBasis.SpecificConsent, "v1", Now).Value;
+
+        // Act
+        var result = consent.Regrant(LegalBasis.HealthProtection, "v2", Now.AddMinutes(1));
+
+        // Assert
+        Assert.Equal(ConsentErrors.LegalBasisNotAllowedForPurpose, result.Error);
+        Assert.Equal(LegalBasis.SpecificConsent, consent.LegalBasis);
+        Assert.Equal(1, consent.Version);
+    }
+
     [Fact]
     public void Grant_WithUnknownPurpose_Fails()
     {

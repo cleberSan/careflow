@@ -1,3 +1,5 @@
+using CareFlow.BuildingBlocks.AspNetCore.Security.ServiceTokens;
+
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 
@@ -11,23 +13,12 @@ internal static class ContactDirectoryExtensions
     /// </summary>
     public static IServiceCollection AddContactDirectory(this IServiceCollection services, IHostEnvironment environment)
     {
-        ArgumentNullException.ThrowIfNull(environment);
-        if (environment.IsProduction())
-        {
-            throw new InvalidOperationException(
-                "O emissor interno local de tokens de serviço não pode ser usado em produção. Use client credentials do IdP.");
-        }
-
-        services.AddOptions<ServiceTokenOptions>()
-            .BindConfiguration(ServiceTokenOptions.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
+        services.AddLocalServiceTokens(environment, VaultContactDirectory.Grant);
         services.AddOptions<VaultOptions>()
             .BindConfiguration(VaultOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.AddSingleton<ServiceTokenIssuer>();
         services.AddHttpClient<IContactDirectory, VaultContactDirectory>(VaultContactDirectory.ClientName, (provider, client) =>
             {
                 client.BaseAddress = provider.GetRequiredService<IOptions<VaultOptions>>().Value.BaseAddress;

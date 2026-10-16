@@ -17,6 +17,7 @@ internal static class VaultAudit
     public const string Updated = "patient.updated";
     public const string LookedUp = "patient.lookup";
     public const string ContactRead = "patient.contact.read";
+    public const string TriageProfileRead = "patient.triage-profile.read";
 
     public static void Record(this VaultDbContext db, Guid tenantId, Guid patientRef, string actor, string action, DateTimeOffset now) =>
         db.RecordAccess(tenantId, SourceService, actor, action, ResourceType, patientRef, now);

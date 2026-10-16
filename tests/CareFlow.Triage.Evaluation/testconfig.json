@@ -1,0 +1,9 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[CareFlow.Triage.Domain]CareFlow.Triage.Domain.Safety.AlarmSignRules,[CareFlow.Triage.Domain]CareFlow.Triage.Domain.Safety.InjectionGuard,[CareFlow.Triage.Domain]CareFlow.Triage.Domain.Pseudonymization.*,[CareFlow.Triage.Domain]CareFlow.Triage.Domain.Engine.TriagePrompt*",
+      "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}
