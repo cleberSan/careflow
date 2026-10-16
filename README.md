@@ -17,11 +17,12 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 | Serviço | Responsabilidade |
 |---|---|
 | Scheduling | Agenda multi-clínica, sem dupla reserva de horário |
-| Patient Vault | Dados pessoais e de saúde cifrados por campo, com chave por clínica |
+| Patient Vault | Dados pessoais e de saúde cifrados por campo, com chave por paciente |
 | Consent | Bases legais, consentimentos e revogação propagada por eventos |
 | Triage | Sugestão de prioridade com IA sobre dados pseudonimizados, com humano no circuito |
 | Notifications | WhatsApp, SMS e e-mail com fallback entre canais |
 | Audit | Trilha de auditoria append-only com hash encadeado |
+| Rights | Pedidos do titular (acesso, portabilidade, eliminação) e Bundle HL7 FHIR R4 |
 
 ## Roadmap
 
@@ -32,7 +33,7 @@ O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em f
 - [x] **Fase 5:** Notifications com fallback entre canais, circuit breaker e falhas injetáveis ([ADR-0009](docs/adr/0009-notificacoes-com-fallback-e-falhas-injetaveis.md))
 - [x] **Fase 6:** OpenTelemetry completo e Painel de Privacidade e Resiliência ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md))
 - [x] **Fase 7:** Triagem com IA sobre dados pseudonimizados, guardrails e revisão humana ([ADR-0011](docs/adr/0011-triagem-com-ia-pseudonimizada.md))
-- [ ] **Fase 8:** Direitos do titular e adaptador HL7 FHIR
+- [x] **Fase 8:** Direitos do titular de ponta a ponta e Bundle HL7 FHIR R4 ([ADR-0012](docs/adr/0012-direitos-do-titular-e-fhir.md))
 - [ ] **Fase 9:** Testes de carga, IaC e deploy com canary
 
 A fase 1 é o site do portfólio, no repositório [portfolio-web](https://github.com/cleberSan/portfolio-web).
@@ -62,7 +63,8 @@ API de agenda em `src/Services/Scheduling`. Destaques:
 Cofre de dados pessoais em `src/Services/PatientVault`. Os outros serviços só conhecem o pseudônimo `patientRef`. Destaques:
 
 - **Cifragem por campo:** AES-256-GCM em cada campo pessoal, com clínica, paciente e campo como dado autenticado. Quem lê o banco ou um backup não vê nada em claro.
-- **Envelope encryption com chave por clínica:** a chave de dados de cada clínica é cifrada por uma chave mestra no KMS, atrás de `IKeyManagementService` (implementação local para desenvolvimento e testes).
+- **Envelope encryption em três níveis:** cada paciente tem a própria chave de dados, embrulhada pela chave da clínica, que é cifrada por uma chave mestra no KMS, atrás de `IKeyManagementService` (implementação local para desenvolvimento e testes). Eliminar o paciente destrói a chave dele (crypto-shredding).
+- **Rotação sem parar:** a chave da clínica rotaciona por rota própria, a manutenção migra os registros em lotes com o cofre no ar e versões antigas são destruídas quando nada depende delas.
 - **Blind index do CPF:** HMAC com chave da clínica, para recusar CPF duplicado e buscar o `patientRef` sem guardar o CPF em claro.
 - **Row-Level Security:** a API conecta com um papel sem privilégio de dono e só enxerga linhas da clínica do token.
 - **Concorrência otimista:** alterações exigem `If-Match` com o ETag lido.
@@ -75,6 +77,9 @@ Cofre de dados pessoais em `src/Services/PatientVault`. Os outros serviços só 
 | `PUT` | `/v1/patients/{patientRef}` | `vault.write` + `If-Match` |
 | `POST` | `/v1/patients/lookup` | `vault.read` |
 | `GET` | `/v1/patients/{patientRef}/contact` | `vault.contact.read` (token de serviço) |
+| `POST` | `/v1/keys/rotation` | `vault.keys` |
+| `POST` | `/v1/keys/maintenance?batchSize=` | `vault.keys` |
+| `DELETE` | `/v1/keys/{version}` | `vault.keys` |
 
 ### Consent
 
@@ -138,14 +143,32 @@ Triagem assistida por IA em `src/Services/Triage` ([ADR-0011](docs/adr/0011-tria
 | `POST` | `/v1/triages/{id}/review` | `triage.review` |
 | `GET` | `/v1/patients/{patientRef}/ai-consent` | `triage.read` ou `triage.review` |
 
+### Rights
+
+Pedidos do titular em `src/Services/Rights` ([ADR-0012](docs/adr/0012-direitos-do-titular-e-fhir.md)). Um pedido atravessa os seis serviços que guardam algo do paciente e só termina quando todos respondem.
+
+- **Identidade antes de tudo:** código de 6 dígitos enviado ao contato do cadastro, cifrado para o Notifications no caminho e guardado só como HMAC; 10 minutos e 5 tentativas.
+- **Prazo visível:** 15 dias a partir do recebimento, com estados `received`, `in-progress`, `completed` e `denied` com motivo.
+- **Pacote do titular:** `leia-me.html` legível, `dados.json` estruturado e `fhir-bundle.json` (Patient, Appointment e Consent, validado contra os perfis base do R4 com o Firely SDK). As seções viajam cifradas para uma chave do próprio pedido; o pacote fica cifrado por 7 dias e sai por um link de 15 minutos e uso único, anônimo e auditado.
+- **Eliminação:** crypto-shredding no cofre, cancelamentos e apagamentos nos outros serviços e comprovante com a versão da política de retenção. A trilha de auditoria fica e a cadeia continua íntegra; depois de restaurar um backup, `erasure-replay` reaplica a eliminação.
+
+| Método | Rota | Escopo |
+|---|---|---|
+| `POST` | `/v1/subject-requests` | `rights.write` |
+| `GET` | `/v1/subject-requests/{id}` | `rights.read` |
+| `POST` | `/v1/subject-requests/{id}/identity-confirmation` | `rights.write` |
+| `POST` | `/v1/subject-requests/{id}/download-links` | `rights.write` |
+| `POST` | `/v1/downloads` | anônima, token no corpo |
+| `POST` | `/v1/subject-requests/{id}/erasure-replay` | `rights.admin` |
+
 ### Observabilidade e Painel
 
-OpenTelemetry nos seis serviços ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md)):
+OpenTelemetry nos sete serviços ([ADR-0010](docs/adr/0010-observabilidade-e-painel-de-privacidade.md)):
 
 - **Um trace por fluxo:** o contexto viaja no envelope do Outbox até o Inbox, então uma reserva é um trace só, da API da agenda ao aviso enviado, e uma revogação vai do Consent ao aviso de cancelamento e à auditoria.
 - **Sem dado pessoal na telemetria:** redação no serviço e no Collector, baggage de fora descartado, e um teste de ponta a ponta que varre spans, logs e métricas exportados atrás de nome, CPF, telefone e e-mail.
 - **Stack local:** Collector, Tempo, Loki, Prometheus e Grafana no docker compose, com dashboards versionados de latência, Outbox, mensagens mortas, propagação da revogação, fallbacks e circuit breaker.
-- **Painel de Privacidade e Resiliência:** o serviço `src/Services/Demo` é o backend do Painel, com sessão por cookie `__Host-`, clínica sintética e partição de circuit breaker por visitante, limites de uso e limpeza no fim. O CI grava os cinco cenários, triagem com IA incluída, e o site reproduz a gravação, com data e commit.
+- **Painel de Privacidade e Resiliência:** o serviço `src/Services/Demo` é o backend do Painel, com sessão por cookie `__Host-`, clínica sintética e partição de circuit breaker por visitante, limites de uso e limpeza no fim. O CI grava os seis cenários, triagem com IA e direitos do titular incluídos, e o site reproduz a gravação, com data e commit.
 
 ### Mensageria
 
