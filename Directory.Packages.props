@@ -19,6 +19,12 @@
     <!-- SDK oficial da Anthropic (MIT), só no serviço de triagem (ADR-0011). -->
     <PackageVersion Include="Anthropic" Version="12.57.0" />
   </ItemGroup>
+  <ItemGroup Label="Chaves">
+    <!-- SDK da Oracle (UPL 1.0 / Apache 2.0), só no cofre: chave mestra no OCI Vault na demonstração hospedada (ADR-0013). -->
+    <PackageVersion Include="OCI.DotNetSDK.Keymanagement" Version="147.1.0" />
+    <!-- Transitiva do SDK da Oracle, fixada acima da 12.0.3 (GHSA-5crp-9r3c-p9vr). -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
   <ItemGroup Label="Persistência">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />

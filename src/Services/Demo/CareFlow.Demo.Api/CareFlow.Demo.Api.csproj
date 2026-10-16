@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="CareFlow.Demo.UnitTests" />
+    <InternalsVisibleTo Include="CareFlow.Demo.IntegrationTests" />
     <InternalsVisibleTo Include="CareFlow.EndToEndTests" />
   </ItemGroup>
 

@@ -46,6 +46,7 @@
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
     <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.Demo.IntegrationTests/CareFlow.Demo.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Demo.UnitTests/CareFlow.Demo.UnitTests.csproj" />
     <Project Path="tests/CareFlow.EndToEndTests/CareFlow.EndToEndTests.csproj" />
     <Project Path="tests/CareFlow.Notifications.IntegrationTests/CareFlow.Notifications.IntegrationTests.csproj" />

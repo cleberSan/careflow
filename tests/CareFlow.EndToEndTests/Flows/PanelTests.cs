@@ -10,7 +10,7 @@ using Npgsql;
 namespace CareFlow.EndToEndTests.Flows;
 
 /// <summary>
-/// O backend do Painel (ADR-0010) contra o sistema inteiro: sessão só por cookie, cada visitante na própria
+/// O backend do Painel (ADR-0010, ADR-0013) contra o sistema inteiro: sessão por token opaco, cada visitante na própria
 /// clínica sintética e na própria partição de circuit breaker, limites de uso e limpeza no fim.
 /// </summary>
 [Collection(SequentialFlows.Name)]
@@ -19,7 +19,7 @@ public sealed class PanelTests(CareFlowSystem system)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Session_IsAHostOnlyHttpOnlyStrictCookie_AndTheBrowserGetsNoToken()
+    public async Task Session_IsAnOpaqueTokenInTheBody_NeverACookieOrAServiceToken()
     {
         // Arrange
         using var visitor = new DemoClient(system.Demo);
@@ -30,19 +30,21 @@ public sealed class PanelTests(CareFlowSystem system)
 
         // Assert
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"));
-        Assert.StartsWith("__Host-careflow-demo=", cookie, StringComparison.Ordinal);
-        foreach (var attribute in new[] { "secure", "httponly", "samesite=strict", "path=/" })
-        {
-            Assert.Contains(attribute, cookie, StringComparison.OrdinalIgnoreCase);
-        }
-
-        Assert.DoesNotContain("domain=", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.False(response.Headers.Contains("Set-Cookie"));
         Assert.DoesNotContain("eyJ", body, StringComparison.Ordinal);
-        Assert.DoesNotContain(cookie.Split(';')[0].Split('=', 2)[1], body, StringComparison.Ordinal);
         using var json = JsonDocument.Parse(body);
+        var token = json.RootElement.GetProperty("token").GetString();
+        Assert.Matches("^[A-Za-z0-9_-]{43}$", token);
         Assert.StartsWith("isolated-", json.RootElement.GetProperty("partition").GetString(), StringComparison.Ordinal);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+
+        // O token só aparece na criação; a leitura da sessão não o devolve.
+        using var read = new HttpRequestMessage(HttpMethod.Get, "demo/v1/session");
+        read.Headers.Add("X-CareFlow-Demo", "1");
+        read.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        var again = await visitor.Http.SendAsync(read, Ct);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.DoesNotContain(token!, await again.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
 
         await visitor.EndAsync();
     }
@@ -67,7 +69,6 @@ public sealed class PanelTests(CareFlowSystem system)
         Assert.Equal(HttpStatusCode.Forbidden, withoutHeader.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, fromForeignOrigin.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, withoutSession.StatusCode);
-        Assert.False(withoutHeader.Headers.Contains("Set-Cookie"));
     }
 
     [Fact]
@@ -320,7 +321,6 @@ public sealed class PanelTests(CareFlowSystem system)
         // Assert
         Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
         Assert.True(refused.Headers.RetryAfter is not null);
-        Assert.False(refused.Headers.Contains("Set-Cookie"));
         Assert.Equal(Enumerable.Repeat(HttpStatusCode.OK, 5).Append(HttpStatusCode.TooManyRequests), perSession);
 
         // A outra sessão tem o próprio balde.
@@ -361,7 +361,7 @@ public sealed class PanelTests(CareFlowSystem system)
         await visitor.EndAsync();
         var afterEnd = await visitor.Http.GetAsync("demo/v1/session", Ct);
 
-        // Assert: o cookie para de valer na hora; os dados somem depois da folga da limpeza.
+        // Assert: o token para de valer na hora; os dados somem depois da folga da limpeza.
         Assert.Equal(HttpStatusCode.Unauthorized, afterEnd.StatusCode);
         await Eventually.GetAsync(
             () => CountAsync(system.Scheduling, "SELECT count(*) FROM appointments WHERE id = @id", booking.AppointmentId),

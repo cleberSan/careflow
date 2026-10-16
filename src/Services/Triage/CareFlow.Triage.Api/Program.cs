@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 
+using CareFlow.BuildingBlocks.AspNetCore.Hosting;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.BuildingBlocks.AspNetCore.Tenancy;
 using CareFlow.BuildingBlocks.Messaging;
@@ -17,6 +18,12 @@ using CareFlow.Triage.Api.Profiles;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
+// Healthcheck do container (ADR-0013): sai antes de montar o host.
+if (HealthProbe.IsRequested(args))
+{
+    return await HealthProbe.RunAsync(args).ConfigureAwait(false);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,7 +60,7 @@ builder.Services
         .Handle<ErasureReapplied, ErasureReappliedConsumer>());
 builder.Services.AddScoped<TriageEraser>();
 
-builder.Services.AddTriageModel(builder.Configuration);
+builder.Services.AddTriageModel(builder.Configuration, builder.Environment);
 builder.Services.AddTriageProfiles(builder.Environment);
 builder.Services.AddTriageFeatures();
 
@@ -78,8 +85,14 @@ app.MapTriageEndpoints();
 
 app.MapDemoPurgeIfEnabled(DatabaseExtensions.ConnectionStringName, AuthorizationPolicies.DemoPurge);
 
-await app.MigrateIfEnabledAsync().ConfigureAwait(false);
+if (await app.MigrateIfEnabledAsync().ConfigureAwait(false))
+{
+    // Etapa de migrations do deploy: o container termina aqui, sem subir a API.
+    return 0;
+}
+
 await app.RunAsync().ConfigureAwait(false);
+return 0;
 
 /// <summary>Ponto de entrada; público para os testes de integração com WebApplicationFactory.</summary>
 public partial class Program;

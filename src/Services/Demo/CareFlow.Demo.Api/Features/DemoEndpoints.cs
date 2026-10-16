@@ -14,9 +14,9 @@ using Microsoft.Extensions.Options;
 namespace CareFlow.Demo.Api.Features;
 
 /// <summary>
-/// Rotas do Painel (ADR-0010). O navegador só fala com estas rotas, pela rota do site na mesma origem: nada de
-/// token, endereço interno ou rota administrativa dos serviços chega a ele. Toda ação vale só para a clínica
-/// sintética da sessão.
+/// Rotas do Painel (ADR-0010, ADR-0013). O navegador só fala com estas rotas, direto do site por CORS: nada de
+/// token dos serviços, endereço interno ou rota administrativa chega a ele, só o token opaco da própria sessão.
+/// Toda ação vale só para a clínica sintética da sessão.
 /// </summary>
 internal static class DemoEndpoints
 {
@@ -38,6 +38,7 @@ internal static class DemoEndpoints
     {
         var demo = app.MapGroup("/demo/v1").WithTags("Demo").AddEndpointFilter<DemoHttp.RequestFilter>();
 
+        demo.MapGet("/status", Status).WithMetadata(new DemoHttp.AvailableWhenSwitchedOff());
         demo.MapPost("/sessions", OpenSessionAsync).RequireRateLimiting(DemoHttp.SessionCreationPolicy);
 
         var session = demo.MapGroup(string.Empty)
@@ -75,10 +76,19 @@ internal static class DemoEndpoints
             return TypedResults.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: opened.Error.Message, extensions: new Dictionary<string, object?> { ["code"] = opened.Error.Code });
         }
 
-        var (session, cookie) = opened.Value;
-        http.Response.Cookies.Append(DemoHttp.CookieName, cookie, DemoHttp.CookieOptions(session.ExpiresAt));
-        return TypedResults.Created("/demo/v1/session", View(session, options.Value));
+        // O token sai só nesta resposta; depois o servidor guarda apenas o hash dele.
+        var (session, token) = opened.Value;
+        return TypedResults.Created("/demo/v1/session", View(session, options.Value) with { Token = token });
     }
+
+    /// <summary>
+    /// Se o Painel ao vivo está disponível agora. Responde mesmo com o interruptor desligado: é por aqui que o site
+    /// decide entre o modo ao vivo e o replay das gravações.
+    /// </summary>
+    public static Ok<StatusView> Status(IOptionsMonitor<DemoSwitchOptions> demoSwitch, DemoSessions sessions, IOptions<DemoOptions> options) =>
+        TypedResults.Ok(demoSwitch.CurrentValue.Enabled
+            ? new StatusView(true, sessions.Active >= options.Value.Slots ? "lotado" : "disponivel")
+            : new StatusView(false, "desligado"));
 
     public static Ok<SessionView> GetSession(HttpContext http, IOptions<DemoOptions> options) =>
         TypedResults.Ok(View(http.Session(), options.Value));
@@ -86,7 +96,6 @@ internal static class DemoEndpoints
     public static NoContent EndSession(HttpContext http, SessionLifecycle lifecycle)
     {
         lifecycle.End(http.Session());
-        http.Response.Cookies.Delete(DemoHttp.CookieName, DemoHttp.CookieOptions(DateTimeOffset.UnixEpoch));
         return TypedResults.NoContent();
     }
 

@@ -47,12 +47,16 @@ public static class TenantDatabaseExtensions
         return services;
     }
 
+    public const string MigrateOnStartupSetting = "Database:ApplyMigrationsOnStartup";
+    public const string MigrateAndExitSetting = "Database:MigrateAndExit";
+
     /// <summary>
-    /// Aplica migrations na subida apenas quando <c>Database:ApplyMigrationsOnStartup</c> está ligado
-    /// (desenvolvimento e testes), com a connection string de migrations. Em produção, migrations rodam
-    /// como etapa do pipeline de deploy e a API nunca conecta com o papel dono do schema.
+    /// Aplica migrations com a connection string de migrations em dois casos: <c>Database:ApplyMigrationsOnStartup</c>
+    /// (desenvolvimento e testes, a API segue subindo) ou <c>Database:MigrateAndExit</c> (etapa do deploy, num
+    /// container de uma execução só). No deploy a API nunca recebe a senha do papel dono do schema (ADR-0013).
     /// </summary>
-    public static async Task MigrateIfEnabledAsync<TContext>(
+    /// <returns>Verdadeiro quando o processo deve terminar sem subir a API.</returns>
+    public static async Task<bool> MigrateIfEnabledAsync<TContext>(
         this WebApplication app,
         string connectionStringName,
         Func<DbContextOptions<TContext>, ITenantContext, TContext> factory)
@@ -61,9 +65,10 @@ public static class TenantDatabaseExtensions
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(factory);
 
-        if (!app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+        var exitAfter = app.Configuration.GetValue<bool>(MigrateAndExitSetting);
+        if (!exitAfter && !app.Configuration.GetValue<bool>(MigrateOnStartupSetting))
         {
-            return;
+            return false;
         }
 
         var connectionString = RequireConnectionString(app.Configuration, connectionStringName + MigrationsSuffix);
@@ -74,6 +79,8 @@ public static class TenantDatabaseExtensions
         {
             await db.Database.MigrateAsync().ConfigureAwait(false);
         }
+
+        return exitAfter;
     }
 
     internal static string RequireConnectionString(IConfiguration configuration, string name)

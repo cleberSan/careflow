@@ -1,0 +1,9 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[CareFlow.Demo.Api]CareFlow.Demo.Api.Common.DemoHttp*,[CareFlow.Demo.Api]CareFlow.Demo.Api.Sessions.*ClinicLedger,[CareFlow.Demo.Api]CareFlow.Demo.Api.Sessions.LedgerEntry",
+      "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}

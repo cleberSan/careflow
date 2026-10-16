@@ -22,6 +22,12 @@ internal sealed class TriageModelOptions
     /// <summary>Diretório das gravações: lido com <c>Recorded</c>, escrito com <c>Anthropic</c> quando <see cref="Record"/>.</summary>
     public string? RecordingsPath { get; set; }
 
+    /// <summary>
+    /// Interruptor do modelo real em ambiente exposto à internet, desligado por padrão: a demonstração pública
+    /// reproduz as gravações, e cada visitante não vira uma chamada paga (ADR-0013).
+    /// </summary>
+    public bool LiveCallsEnabled { get; set; }
+
     /// <summary>Com <c>Anthropic</c>, grava cada resposta em <see cref="RecordingsPath"/>.</summary>
     public bool Record { get; set; }
 

@@ -27,7 +27,7 @@ internal static class DatabaseExtensions
                 (CoreEventId.SaveChangesFailed, LogLevel.Debug),
                 (RelationalEventId.CommandError, LogLevel.Debug))));
 
-    public static Task MigrateIfEnabledAsync(this WebApplication app) =>
+    public static Task<bool> MigrateIfEnabledAsync(this WebApplication app) =>
         app.MigrateIfEnabledAsync<SchedulingDbContext>(
             ConnectionStringName,
             static (options, tenant) => new SchedulingDbContext(options, tenant));

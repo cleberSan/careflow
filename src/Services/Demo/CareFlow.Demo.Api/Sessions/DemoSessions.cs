@@ -20,7 +20,7 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
     private int _triagesReserved;
     private int _rightsReserved;
 
-    /// <summary>Hash SHA-256 do valor do cookie; o valor em si nunca é guardado.</summary>
+    /// <summary>Hash SHA-256 do token; o valor em si nunca é guardado.</summary>
     public string Id { get; } = id;
 
     public Guid Clinic { get; } = clinic;
@@ -166,7 +166,7 @@ internal sealed class DemoSession(string id, Guid clinic, int slot, DateTimeOffs
 /// local); hospedar o Painel ao vivo com mais réplicas troca isto por um armazenamento compartilhado (ADR-0010).
 /// </summary>
 /// <remarks>
-/// O cookie leva 32 bytes aleatórios; aqui fica só o hash, então um despejo de memória não dá cookies válidos.
+/// O token leva 32 bytes aleatórios; aqui fica só o hash, então um despejo de memória não dá tokens válidos.
 /// Uma partição só volta ao pool depois que a limpeza da clínica anterior terminou e o resfriamento passou.
 /// </remarks>
 internal sealed class DemoSessions(IOptions<DemoOptions> options, TimeProvider time)
@@ -206,28 +206,40 @@ internal sealed class DemoSessions(IOptions<DemoOptions> options, TimeProvider t
         }
     }
 
-    /// <summary>Cria a sessão e devolve o valor do cookie (o único momento em que ele existe no servidor).</summary>
-    public (DemoSession Session, string CookieValue) Open(Guid clinic, int slot)
+    /// <summary>Partição presa por uma clínica que sobrou de antes do reinício, até a limpeza dela terminar.</summary>
+    public void ClaimSlot(int slot)
     {
-        var cookie = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        var now = time.GetUtcNow();
-        var session = new DemoSession(Hash(cookie), clinic, slot, now, now + _options.SessionLifetime);
-        _sessions[session.Id] = session;
-        return (session, cookie);
+        lock (_slotsGate)
+        {
+            if (_slots.ContainsKey(slot))
+            {
+                _slots[slot] = SlotState.Taken;
+            }
+        }
     }
 
-    public DemoSession? Find(string? cookieValue)
+    /// <summary>Cria a sessão e devolve o token (o único momento em que ele existe no servidor).</summary>
+    public (DemoSession Session, string Token) Open(Guid clinic, int slot)
     {
-        if (string.IsNullOrEmpty(cookieValue) || cookieValue.Length > 64)
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var now = time.GetUtcNow();
+        var session = new DemoSession(Hash(token), clinic, slot, now, now + _options.SessionLifetime);
+        _sessions[session.Id] = session;
+        return (session, token);
+    }
+
+    public DemoSession? Find(string? token)
+    {
+        if (string.IsNullOrEmpty(token) || token.Length > 64)
         {
             return null;
         }
 
-        return _sessions.TryGetValue(Hash(cookieValue), out var session) && session.ExpiresAt > time.GetUtcNow() ? session : null;
+        return _sessions.TryGetValue(Hash(token), out var session) && session.ExpiresAt > time.GetUtcNow() ? session : null;
     }
 
-    /// <summary>Tira a sessão do mapa (o cookie para de valer na hora); a limpeza vem depois.</summary>
+    /// <summary>Tira a sessão do mapa (o token para de valer na hora); a limpeza vem depois.</summary>
     public bool Close(DemoSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -263,7 +275,7 @@ internal sealed class DemoSessions(IOptions<DemoOptions> options, TimeProvider t
         return all;
     }
 
-    private static string Hash(string cookie) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cookie)));
+    private static string Hash(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     private readonly record struct SlotState(bool InUse, DateTimeOffset AvailableAt)
     {

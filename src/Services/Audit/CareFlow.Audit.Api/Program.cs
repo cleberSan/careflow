@@ -1,3 +1,4 @@
+using CareFlow.BuildingBlocks.AspNetCore.Hosting;
 using CareFlow.Audit.Api.Chain;
 using CareFlow.Audit.Api.Common.Observability;
 using CareFlow.Audit.Api.Common.Security;
@@ -13,6 +14,12 @@ using CareFlow.Contracts.Rights;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
+// Healthcheck do container (ADR-0013): sai antes de montar o host.
+if (HealthProbe.IsRequested(args))
+{
+    return await HealthProbe.RunAsync(args).ConfigureAwait(false);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,8 +81,14 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 
 app.MapAuditEndpoints();
 
-await app.MigrateIfEnabledAsync().ConfigureAwait(false);
+if (await app.MigrateIfEnabledAsync().ConfigureAwait(false))
+{
+    // Etapa de migrations do deploy: o container termina aqui, sem subir a API.
+    return 0;
+}
+
 await app.RunAsync().ConfigureAwait(false);
+return 0;
 
 /// <summary>Ponto de entrada; público para os testes de integração com WebApplicationFactory.</summary>
 public partial class Program;

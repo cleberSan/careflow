@@ -1,6 +1,14 @@
 namespace CareFlow.Demo.Api.Features;
 
-public sealed record SessionView(DateTimeOffset ExpiresAt, string Partition, Guid PatientRef, int Bookings, int MaxBookings);
+/// <summary><see cref="Token"/> só vem na criação da sessão; o Painel o guarda em memória e manda em <c>Authorization</c>.</summary>
+public sealed record SessionView(DateTimeOffset ExpiresAt, string Partition, Guid PatientRef, int Bookings, int MaxBookings)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Token { get; init; }
+}
+
+/// <summary><see cref="State"/>: <c>disponivel</c>, <c>lotado</c> (todas as sessões em uso) ou <c>desligado</c> (interruptor).</summary>
+public sealed record StatusView(bool Available, string State);
 
 public sealed record BookingView(Guid AppointmentId, DateTimeOffset StartsAt, string TraceId, int Attempts, IReadOnlyList<string> Refusals);
 

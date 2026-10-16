@@ -10,20 +10,27 @@ using Microsoft.Extensions.Options;
 
 namespace CareFlow.Demo.Api.Common;
 
-/// <summary>Cookie de sessão e as regras que toda rota do Painel aplica antes do handler.</summary>
+/// <summary>Token de sessão e as regras que toda rota do Painel aplica antes do handler.</summary>
+/// <remarks>
+/// A sessão é um token opaco de 32 bytes aleatórios no cabeçalho <c>Authorization: Bearer</c>, guardado só na memória
+/// da página. Um cookie não serviria: o site (vercel.app) e o backend (duckdns.org) são sites diferentes, e
+/// navegadores bloqueiam cookie de terceiro (ADR-0013). Como nada vai sozinho em requisição de outro site, não há
+/// CSRF; o cabeçalho <c>X-CareFlow-Demo</c> e a lista de origens continuam como segunda barreira.
+/// </remarks>
 internal static class DemoHttp
 {
-    /// <summary>
-    /// <c>__Host-</c>: o navegador só aceita com Secure, Path=/ e sem Domain, então nem um subdomínio consegue
-    /// sobrescrever. HttpOnly (script não lê) e SameSite=Strict (não vai em requisição de outro site).
-    /// </summary>
-    public const string CookieName = "__Host-careflow-demo";
+    public const string AuthorizationScheme = "Bearer";
 
-    /// <summary>Cabeçalho obrigatório: um formulário de outro site não consegue enviá-lo sem CORS, que o Demo não libera.</summary>
+    /// <summary>Cabeçalho obrigatório: força o preflight de CORS, que só as origens do site passam.</summary>
     public const string CsrfHeader = "X-CareFlow-Demo";
+
+    public const string CorsPolicy = "careflow-site";
 
     public const string SessionCreationPolicy = "demo-session-creation";
     public const string SessionPolicy = "demo-session";
+
+    /// <summary>Comprimento do token (32 bytes em Base64url, sem preenchimento).</summary>
+    public const int TokenLength = 43;
 
     private const string SessionItem = "careflow.demo.session";
 
@@ -33,31 +40,50 @@ internal static class DemoHttp
 
     public static readonly Error NoSession = Error.Unauthorized("Demo.SemSessao", "Sessão de demonstração ausente ou vencida. Comece uma nova.");
 
-    public static CookieOptions CookieOptions(DateTimeOffset expires) => new()
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Strict,
-        Path = "/",
-        Expires = expires,
-        IsEssential = true,
-    };
+    public static readonly Error SwitchedOff = Error.Failure("Demo.Desligado", "A demonstração ao vivo está desligada agora. O Painel mostra a gravação.");
 
     public static DemoSession Session(this HttpContext context) =>
         context.Items[SessionItem] as DemoSession ?? throw new InvalidOperationException("Rota sem o filtro de sessão.");
 
-    /// <summary>Partição do limite por sessão: hash do cookie (o valor em si não fica como chave em memória).</summary>
-    public static string SessionPartition(HttpContext context) =>
-        context.Request.Cookies.TryGetValue(CookieName, out var cookie) && cookie.Length is > 0 and <= 64
-            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cookie)))
-            : "sem-sessao";
+    /// <summary>O token do cabeçalho, ou nada se faltar ou tiver formato inesperado.</summary>
+    public static string? Token(HttpContext context)
+    {
+        var header = context.Request.Headers.Authorization.ToString();
+        var prefix = AuthorizationScheme + " ";
+        if (!header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
 
-    /// <summary>Partição do limite de criação: o endereço de origem, nunca registrado em log.</summary>
+        var token = header[prefix.Length..].Trim();
+        return token.Length == TokenLength ? token : null;
+    }
+
+    /// <summary>Partição do limite por sessão: hash do token (o valor em si não fica como chave em memória).</summary>
+    public static string SessionPartition(HttpContext context) =>
+        Token(context) is { } token ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))) : "sem-sessao";
+
+    /// <summary>
+    /// Partição dos limites por origem: o endereço do visitante, nunca registrado em log. Atrás do proxy, é o que o
+    /// middleware de cabeçalhos encaminhados já validou (só um salto, só das redes do proxy).
+    /// </summary>
     public static string ClientPartition(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
 
-    /// <summary>Cabeçalho anti-CSRF e origem permitida, em toda rota do Painel.</summary>
-    public sealed class RequestFilter(IOptions<DemoOptions> options) : IEndpointFilter
+    /// <summary>Resposta de serviço indisponível com <c>Retry-After</c>, para o site cair no replay e tentar depois.</summary>
+    public static IResult Unavailable(HttpContext context, Error error, int retryAfterSeconds)
     {
+        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return TypedResults.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: error.Message,
+            extensions: new Dictionary<string, object?> { ["code"] = error.Code });
+    }
+
+    /// <summary>Interruptor, cabeçalho anti-CSRF e origem permitida, em toda rota do Painel.</summary>
+    public sealed class RequestFilter(IOptions<DemoOptions> options, IOptionsMonitor<DemoSwitchOptions> demoSwitch) : IEndpointFilter
+    {
+        public const int SwitchedOffRetryAfterSeconds = 300;
+
         public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
         {
             ArgumentNullException.ThrowIfNull(context);
@@ -75,11 +101,19 @@ internal static class DemoHttp
                 return ForeignOrigin.ToProblem();
             }
 
+            if (!demoSwitch.CurrentValue.Enabled && context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<AvailableWhenSwitchedOff>() is null)
+            {
+                return Unavailable(context.HttpContext, SwitchedOff, SwitchedOffRetryAfterSeconds);
+            }
+
             return await next(context).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Resolve a sessão pelo cookie; sem sessão válida, 401.</summary>
+    /// <summary>Marca a rota que continua respondendo com o Demo desligado (a de estado, que o site consulta).</summary>
+    public sealed class AvailableWhenSwitchedOff;
+
+    /// <summary>Resolve a sessão pelo token; sem sessão válida, 401.</summary>
     public sealed class SessionFilter(DemoSessions sessions) : IEndpointFilter
     {
         public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -87,8 +121,7 @@ internal static class DemoHttp
             ArgumentNullException.ThrowIfNull(context);
             ArgumentNullException.ThrowIfNull(next);
 
-            context.HttpContext.Request.Cookies.TryGetValue(CookieName, out var cookie);
-            if (sessions.Find(cookie) is not { } session)
+            if (sessions.Find(Token(context.HttpContext)) is not { } session)
             {
                 return NoSession.ToProblem();
             }
