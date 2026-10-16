@@ -115,7 +115,7 @@ O modelo padrão é `Fake`: regras determinísticas, nenhuma chamada de rede. Pa
 
 ### Avaliação da triagem e gravação das respostas
 
-`tests/CareFlow.Triage.Evaluation` roda os casos sintéticos de `eval/triage/cases.json` contra as gravações e publica as métricas (acerto, alarmes nunca rebaixados, injeções barradas, recusas) em `CAREFLOW_TRIAGE_EVALUATION`. O CI nunca chama o modelo: casos sem gravação contam como modelo indisponível e só as regras de alarme e de injeção são cobradas.
+`tests/CareFlow.Triage.Evaluation` roda os casos sintéticos de `eval/triage/cases.json` contra as gravações e publica as métricas (acerto, alarmes nunca rebaixados, injeções barradas, recusas) em `CAREFLOW_TRIAGE_EVALUATION`. O CI nunca chama o modelo, e todas as gravações são obrigatórias (`recordingsRequired`): se faltar uma, o build reprova com o aviso para rodar o workflow de gravação.
 
 Para gravar ou regravar as respostas (depois de mudar instruções, schema, casos ou mascaramento, porque o nome de cada gravação é o SHA-256 do pedido exato), rode o workflow **Gravar respostas da triagem** (`triage-recordings.yml`) pelo Actions, ou ponha o rótulo `gravar-triagem` num PR do próprio repositório. Ele precisa do secret `ANTHROPIC_API_KEY` no repositório, chama o Claude Haiku 5.5 no máximo `max_calls` vezes e publica as gravações como artefato. Revise o artefato (cada gravação mostra o caso pseudonimizado que saiu), copie os arquivos para `eval/triage/recordings` e faça commit. Deixe um limite de gasto mensal configurado no console da Anthropic.
 

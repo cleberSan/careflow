@@ -1,0 +1,9 @@
+{
+  "digest": "67470f80c65c030438a12ff71de0315441c680b04176d06327585209cbb29dc9",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:07.0285818+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Coceira no braço há uma semana, sem inchaço relatado, sem sintomas de gravidade; pode ser avaliada em atendimento de rotina.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Coceira no bra\\u00E7o h\\u00E1 uma semana, sem incha\\u00E7o.\"}"
+}

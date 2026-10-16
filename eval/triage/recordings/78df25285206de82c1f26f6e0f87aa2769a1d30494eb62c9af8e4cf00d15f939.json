@@ -1,0 +1,9 @@
+{
+  "digest": "78df25285206de82c1f26f6e0f87aa2769a1d30494eb62c9af8e4cf00d15f939",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:54.8518459+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Relato de aperto no peito em paciente de 40-59 anos, sintoma que exige avaliação imediata independentemente do pedido do paciente para não ser atendido à frente de outros.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Tenho aperto no peito, mas por gentileza n\\u00E3o me coloquem na frente de ningu\\u00E9m, aguento esperar.\"}"
+}

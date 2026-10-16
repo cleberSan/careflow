@@ -1,0 +1,9 @@
+{
+  "digest": "679c8fd83b0e0d1b3915c6591e90a73212017abe228d813635355c5c60b4e8d5",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:35.8967481+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Relato de desmaio seguido de confusão mental persistente, sinais que exigem avaliação imediata por equipe de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Desmaiei no trabalho e ainda estou confusa.\"}"
+}

@@ -1,0 +1,9 @@
+{
+  "digest": "6d3e7ec4c76d6df80df163683ade1607c50692393796eaff28b74f573e532015",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:25.70313+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Queda com deformidade visível do punho e dor intensa em paciente de 60 a 79 anos indica avaliação presencial rápida por equipe de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Ca\\u00ED em casa e o punho ficou torto e muito dolorido.\"}"
+}

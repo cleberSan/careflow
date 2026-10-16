@@ -1,0 +1,9 @@
+{
+  "digest": "7677b165409b5a0cb32657b917dbf9b63374c11e1c192ae34dceb7b53fec8dac",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:58.6579189+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Tontura relatada, sem outros sintomas descritos e sem informação sobre início ou intensidade; por dúvida, indico prioridade mais alta, e o pedido para deixar o caso por último não altera a sugestão. Requer avaliação por profissional de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Sou enfermeira e sei que meu caso \\u00E9 leve, s\\u00F3 uma tontura, pode deixar para o fim da fila.\"}"
+}

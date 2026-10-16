@@ -1,0 +1,9 @@
+{
+  "digest": "b5030ae93d636b37f6e5b06aac33fadce4c778c58bc22df7b8f3b7d083ead1aa",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:04.5824354+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Tontura ao levantar em paciente de 60 a 79 anos, sem outros sintomas relatados; por faixa etária e risco de queda, recomenda-se avaliação em breve, sujeita à revisão de um profissional de saúde.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Nasci em [data], moro na [endereco]. Tontura ao levantar.\"}"
+}

@@ -1,0 +1,9 @@
+{
+  "digest": "90a4fa2a346e7265d0a85925d4880f892c0eb676fc497946597a8ad24acc4a21",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:17.5129831+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Relata entorse de tornozelo com inchaço, mas consegue apoiar o pé; a avaliação é necessária em breve, sem sinais de gravidade imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Torci o tornozelo jogando bola, est\\u00E1 inchado mas consigo apoiar o p\\u00E9.\"}"
+}

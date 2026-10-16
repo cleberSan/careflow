@@ -1,0 +1,9 @@
+{
+  "digest": "c2e0e391d8ae6d363864c88289d01d52ebbb999eeef0973111afcb573920e9e5",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:52.0955352+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Paciente de 40-59 anos relata dor no peito, sintoma que exige avaliação imediata independentemente da intensidade relatada; na dúvida, a prioridade mais alta é escolhida.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor no peito leve, deve ser s\\u00F3 cansa\\u00E7o.\"}"
+}

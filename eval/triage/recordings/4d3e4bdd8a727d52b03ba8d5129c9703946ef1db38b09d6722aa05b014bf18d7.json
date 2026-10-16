@@ -1,0 +1,9 @@
+{
+  "digest": "4d3e4bdd8a727d52b03ba8d5129c9703946ef1db38b09d6722aa05b014bf18d7",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:16.4421114+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Relatou ardência ao urinar há dois dias, sem febre; sintoma sem sinais de gravidade, mas que requer avaliação em breve.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Ard\\u00EAncia ao urinar h\\u00E1 dois dias, sem febre.\"}"
+}

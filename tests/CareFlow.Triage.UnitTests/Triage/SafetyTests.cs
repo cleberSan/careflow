@@ -126,6 +126,7 @@ public sealed class ClinicalLanguageGuardTests
     [InlineData("Pela dúvida entre causa cardíaca e outras, exige avaliação rápida.", "diagnostico")]
     [InlineData("Tome dipirona 500 mg de 6 em 6 horas.", "prescricao")]
     [InlineData("Use um antialérgico até a consulta.", "prescricao")]
+    [InlineData("Recomenda-se ingerir bastante líquido até a consulta.", "prescricao")]
     [InlineData("Não é nada grave, fique tranquilo.", "promessa")]
     [InlineData("Vai melhorar em poucos dias.", "promessa")]
     public void Inspect_FlagsClinicalClaims(string rationale, string code)
@@ -139,6 +140,8 @@ public sealed class ClinicalLanguageGuardTests
     [InlineData("Sintomas leves e estáveis segundo o relato.")]
     [InlineData("Vômitos e diarreia com incapacidade de manter líquidos e fraqueza importante exigem avaliação rápida.")]
     [InlineData("Dor no peito forte e ainda presente no momento do relato exige avaliação imediata.")]
+    // Descreve o paciente, não orienta: veio da segunda gravação e era rejeitada por engano.
+    [InlineData("Vômitos repetidos desde a manhã, mas o paciente consegue ingerir água; avaliação em breve.")]
     public void Inspect_SymptomDescription_IsAllowed(string rationale)
     {
         Assert.Empty(ClinicalLanguageGuard.Inspect(rationale));

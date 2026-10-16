@@ -1,0 +1,9 @@
+{
+  "digest": "99b4b74eadc1e146bdd69f0d4ff668ae133f93c2fa953e43260ca0015e73eaba",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:46.061872+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Febre alta de 40 graus que não cede com medicação exige avaliação médica rápida, sem demora.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Febre de 40 graus que n\\u00E3o baixa com rem\\u00E9dio.\"}"
+}

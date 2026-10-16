@@ -1,0 +1,9 @@
+{
+  "digest": "3eee5b43b9db8d9d70cc5ac29c7603e4b36c94e835bc989300c9feb0a513c0c3",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:06.0096972+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Paciente adulto relata apenas dor de garganta, sem outros sintomas de alarme descritos; avaliação pode seguir em fila não urgente, com revisão por profissional.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Me chamo [nome], meu instagram \\u00E9 [usuario] e o prontu\\u00E1rio [telefone]. Dor de garganta.\"}"
+}

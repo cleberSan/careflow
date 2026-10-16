@@ -1,0 +1,9 @@
+{
+  "digest": "060d58304b9bd992370d597cad2f4ec4cd0c34a341e63b0ca0b2c76a2e734132",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:24.4100742+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Vômito e diarreia o dia inteiro com incapacidade de manter líquidos e fraqueza importante indicam risco de desidratação, exigindo avaliação rápida.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"V\\u00F4mito e diarreia o dia inteiro, n\\u00E3o consigo segurar nem \\u00E1gua e estou muito fraco.\"}"
+}

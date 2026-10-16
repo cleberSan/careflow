@@ -1,0 +1,9 @@
+{
+  "digest": "806a1a642ed4c5b5a1ee1404da42b1ae01a31fbc12bcce389baa5b9ebdddbc12",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:48.9107447+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Trauma craniano com vômito após queda da escada exige avaliação imediata por equipe de emergência.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Bati a cabe\\u00E7a ao cair da escada e estou vomitando.\"}"
+}

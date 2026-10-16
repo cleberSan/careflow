@@ -1,0 +1,9 @@
+{
+  "digest": "392bcd2c09cc9de3071e8ae2777934bbaead514ec23e8abee8dfc8ab401beafb",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:34.4953224+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Boca torta de início súbito e braço direito sem movimento em paciente de 60 a 79 anos exigem avaliação imediata, sem demora.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Meu pai ficou com a boca torta e n\\u00E3o mexe o bra\\u00E7o direito.\"}"
+}

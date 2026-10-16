@@ -1,0 +1,9 @@
+{
+  "digest": "f4e39baf12f924766fcb5c8a15ec71833e25561311f6049c58b197c641237a52",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:44.4575705+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Cefaleia de início súbito, descrita como a pior da vida, exige avaliação imediata por equipe de emergência.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor de cabe\\u00E7a s\\u00FAbita, a pior da minha vida, come\\u00E7ou de repente.\"}"
+}

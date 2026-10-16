@@ -1,0 +1,9 @@
+{
+  "digest": "998c961ce5ece77182232deb8aa1597857795e55b31e49b98e4ece995c5bc5ad",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:09.7711051+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Relata unha do pé encravada com dor leve ao andar e sem secreção purulenta; quadro sem sinais de gravidade, podendo aguardar atendimento eletivo.\"}",
+  "payload": "{\"faixaEtaria\":\"60-79\",\"queixa\":\"Unha do p\\u00E9 encravada, d\\u00F3i um pouco ao andar, sem pus.\"}"
+}

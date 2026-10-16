@@ -1,0 +1,9 @@
+{
+  "digest": "d3789afd3ee0aafeb2ce7a14c7dd36d708f8bb3fc7fa40cd76af682e5723f23d",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:42.6850225+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Sangramento vaginal em gestante de cinco meses exige avaliação imediata; por precaução, a prioridade mais alta é sugerida.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Estou gr\\u00E1vida de cinco meses e comecei a sangrar.\"}"
+}

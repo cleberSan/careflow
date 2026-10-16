@@ -1,0 +1,9 @@
+{
+  "digest": "f521cecf9c1431390b1c5130d49a2facd3bf2d416c896482b270940cae740ca1",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:05.4593411+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Paciente relata apenas pedido de renovação de receita de medicação de uso contínuo e afirma estar bem, sem sintomas agudos relatados; avaliação pode ocorrer em rotina.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Quero renovar a receita do rem\\u00E9dio de press\\u00E3o que tomo h\\u00E1 anos, estou bem.\"}"
+}

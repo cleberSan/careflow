@@ -1,0 +1,9 @@
+{
+  "digest": "89ae4b4a8fc3102ced6e823c45fae222adec9108e26501f01cf4d4504b3b913f",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:15.0175123+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"urgent\",\"rationale\":\"Criança de 2 a 11 anos com dor de ouvido desde a noite anterior e choro intenso; a dor relatada e o desconforto justificam avaliação ainda hoje, por precaução.\"}",
+  "payload": "{\"faixaEtaria\":\"2-11\",\"queixa\":\"Meu filho est\\u00E1 com dor de ouvido desde a noite passada e chorou bastante.\"}"
+}

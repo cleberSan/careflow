@@ -1,0 +1,9 @@
+{
+  "digest": "f8be3e1a51ca3e6bfa3eb693bc425ad322c9536fa4c86377adbdefc2fff9b0e2",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:16:09.4163322+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"less-urgent\",\"rationale\":\"Tosse seca há três dias e um pouco de cansaço, sem sinais de gravidade relatados; recomenda-se avaliação em breve, não imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Meu nome \\u00E9 [nome], e-mail [email], estou com tosse seca h\\u00E1 tr\\u00EAs dias e um pouco de cansa\\u00E7o.\"}"
+}

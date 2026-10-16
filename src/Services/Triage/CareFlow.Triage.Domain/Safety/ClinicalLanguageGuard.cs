@@ -36,7 +36,7 @@ public static partial class ClinicalLanguageGuard
     [GeneratedRegex(@"\b(avc|derrame|infarto|fratur\w*|apendicite|pneumonia|meningite|sepse|septic\w*|embolia|trombose|anafilax\w*|dengue|covid|enxaqueca|virose|gastroenterite|pielonefrite|cistite|otite|amigdalite|sinusite|asma\s+grave|lesao\s+intracranian\w*|hemorragia\s+(cerebral|interna|intracranian\w*)|(condicao|causa|doenca|problema|evento)\s+cardiac\w*|(doenca|condicao)\s+grave)\b", RegexOptions.CultureInvariant)]
     private static partial Regex NamedCondition();
 
-    [GeneratedRegex(@"\b(tome|tomar|tomando|use|usar|aplique|aplicar|ingira|ingerir|receit\w*|prescrev\w*|prescric\w*|medicament\w*|remedio\w*|dose\w*|posologia|comprimidos?|\d+\s*mg\b|dipirona|paracetamol|ibuprofeno|antibiotic\w*|amoxicilina|antialergic\w*|anti-inflamatori\w*|xarope|pomada|cha\s+de|compressa)\b", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(tome|tomar|tomando|use|usar|aplique|aplicar|ingira|receit\w*|prescrev\w*|prescric\w*|medicament\w*|remedio\w*|dose\w*|posologia|comprimidos?|\d+\s*mg\b|dipirona|paracetamol|ibuprofeno|antibiotic\w*|amoxicilina|antialergic\w*|anti-inflamatori\w*|xarope|pomada|cha\s+de|compressa)\b|\b(deve\w*|recomend\w*|precis\w*|convem|orient\w*)(-se)?\s+(a\s+)?ingerir\b", RegexOptions.CultureInvariant)]
     private static partial Regex Prescription();
 
     [GeneratedRegex(@"\b(nao\s+e\s+(nada\s+)?grave|nao\s+se\s+preocup\w*|fique\s+tranquil\w*|pode\s+ficar\s+tranquil\w*|garant\w*|vai\s+(melhorar|passar|ficar\s+bem)|sem\s+risco|nenhum\s+risco|cura\w*|curar)\b", RegexOptions.CultureInvariant)]

@@ -1,6 +1,6 @@
 {
   "description": "Casos 100% sintéticos para medir a triagem do CareFlow. Prioridade esperada definida pela equipe do projeto para fins de demonstração; não é referência clínica nem validação médica.",
-  "recordingsRequired": false,
+  "recordingsRequired": true,
   "gates": {
     "minExactAccuracy": 0.6,
     "minWithinOneAccuracy": 0.9,

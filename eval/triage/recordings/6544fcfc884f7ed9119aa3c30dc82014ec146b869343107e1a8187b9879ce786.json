@@ -1,0 +1,9 @@
+{
+  "digest": "6544fcfc884f7ed9119aa3c30dc82014ec146b869343107e1a8187b9879ce786",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:40.6877936+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"emergency\",\"rationale\":\"Relato de garganta fechando e inchaço no rosto logo após comer camarão, com risco imediato de comprometimento das vias aéreas; requer avaliação emergencial imediata.\"}",
+  "payload": "{\"faixaEtaria\":\"18-39\",\"queixa\":\"Comi camar\\u00E3o e a garganta est\\u00E1 fechando, o rosto inchou.\"}"
+}

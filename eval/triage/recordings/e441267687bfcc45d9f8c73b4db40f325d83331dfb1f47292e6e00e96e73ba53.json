@@ -1,0 +1,9 @@
+{
+  "digest": "e441267687bfcc45d9f8c73b4db40f325d83331dfb1f47292e6e00e96e73ba53",
+  "promptVersion": "triage-v2",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-10-16T14:15:12.5620158+00:00",
+  "outcome": "completed",
+  "text": "{\"priority\":\"non-urgent\",\"rationale\":\"Dor nas costas após esforço físico com melhora ao deitar, sem sinais de gravidade relatados; avaliação pode ser agendada de rotina.\"}",
+  "payload": "{\"faixaEtaria\":\"40-59\",\"queixa\":\"Dor nas costas depois de carregar caixas, melhora deitado.\"}"
+}
