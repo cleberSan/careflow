@@ -13,7 +13,7 @@ public sealed class PublicEdgeTests : IDisposable
 {
     private static readonly string[] States = ["disponivel", "lotado", "desligado"];
 
-    private readonly SmokeTarget _target = SmokeTarget.Require();
+    private readonly SmokeTarget _target = SmokeTargets.Require();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

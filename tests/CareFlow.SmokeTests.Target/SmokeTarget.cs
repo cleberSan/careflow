@@ -11,7 +11,7 @@ namespace CareFlow.SmokeTests;
 /// manda a conexão para outro endereço (127.0.0.1:8443) sem mudar o nome do TLS, e <c>CAREFLOW_SMOKE_CA</c> confia
 /// numa CA local (a do Caddy com <c>tls internal</c>). Em produção os dois ficam vazios: vale a cadeia pública.
 /// </summary>
-internal sealed class SmokeTarget : IDisposable
+public sealed class SmokeTarget : IDisposable
 {
     public const string DemoHeader = "X-CareFlow-Demo";
     public const string ForeignOrigin = "https://exemplo-malicioso.invalid";
@@ -97,13 +97,6 @@ internal sealed class SmokeTarget : IDisposable
             origin.TrimEnd('/'),
             read("CAREFLOW_SMOKE_CONNECT"),
             read("CAREFLOW_SMOKE_CA"));
-    }
-
-    public static SmokeTarget Require()
-    {
-        var target = FromEnvironment();
-        Assert.SkipWhen(target is null, "CAREFLOW_SMOKE_URL não definida: o teste de fumaça só roda depois de um deploy.");
-        return target!;
     }
 
     /// <summary>Uma chamada como a do site: com o cabeçalho do Painel e a origem do site.</summary>
