@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Restauração de verdade da demonstração hospedada (ADR-0013). Só à mão, como root:
+#   careflow-restore <AAAAMMDDTHHMMSSZ | pasta local> --confirm [--include-rights]
+#
+# O registro de eliminações (banco do Rights) é mais novo que o backup: uma eliminação concluída depois do backup
+# voltaria com a restauração. Por isso, por padrão, o banco do Rights no ar é mantido e só os outros seis voltam do
+# backup. Use --include-rights só quando o banco do Rights também se perdeu (aí as eliminações posteriores ao
+# backup se perdem junto; ADR-0013).
+#
+# 1. desliga o Painel ao vivo (o site cai no replay) e para os serviços;
+# 2. restaura os bancos do backup por cima dos atuais;
+# 3. sobe a versão no ar de novo (migrations primeiro);
+# 4. reaplica cada eliminação concluída do registro (POST /erasure-replay, fase 8), confere que o cofre não tem
+#    mais a chave (DEK) de nenhum desses pacientes e que a cadeia da auditoria de cada clínica fecha;
+# 5. apaga as clínicas sintéticas que voltaram com o backup (na demonstração toda clínica é de visitante e
+#    já teria expirado) e religa o Painel.
+set -euo pipefail
+umask 077
+# shellcheck source=careflow-common.sh
+source "$(dirname "$(readlink -f "$0")")/careflow-common.sh"
+
+require_root
+[[ "${2:-}" == "--confirm" ]] || die "isto sobrescreve os bancos no ar; rode com: careflow-restore <backup> --confirm"
+include_rights=false
+[[ "${3:-}" == "--include-rights" ]] && include_rights=true
+source_arg="${1:-}"
+[[ -n "$source_arg" ]] || die "informe o backup (AAAAMMDDTHHMMSSZ) ou uma pasta local"
+
+if [[ -d "$source_arg" ]]; then
+  work_dir="$source_arg"
+  (cd "$work_dir" && sha256sum --quiet -c SHA256SUMS) || die "a pasta $work_dir não confere com o SHA256SUMS"
+else
+  load_backup_settings
+  work_dir="$(mktemp -d /var/tmp/careflow-restore-XXXXXX)"
+  trap 'rm -rf "$work_dir"' EXIT
+  download_backup "$source_arg" "$work_dir"
+fi
+
+ROOT="${CAREFLOW_ROOT:-/opt/careflow}"
+current="$(basename "$(readlink -f "$ROOT/current")")"
+[[ "$current" =~ ^[0-9a-f]{40}$ ]] || die "nada no ar: faça um deploy antes de restaurar"
+compose_files=(-f "$ROOT/current/deploy/prod/compose.yaml")
+[[ -z "${CAREFLOW_COMPOSE_OVERRIDE:-}" ]] || compose_files+=(-f "$ROOT/current/deploy/prod/$CAREFLOW_COMPOSE_OVERRIDE")
+compose() { CAREFLOW_TAG="$current" docker compose -p careflow --env-file "$ETC/release.env" "${compose_files[@]}" "$@"; }
+
+if [[ "$include_rights" == false ]] && ! psql_owner careflow_rights -c "SELECT 1 FROM subject_requests LIMIT 1;" >/dev/null 2>&1; then
+  die "o banco do Rights no ar não responde; se ele se perdeu, rode de novo com --include-rights"
+fi
+
+careflow-deploy demo off
+log "parando os serviços (banco e broker continuam)"
+compose stop caddy demo patient-vault consent scheduling notifications audit triage rights
+
+for database in "${DATABASES[@]}"; do
+  if [[ "$database" == careflow_rights && "$include_rights" == false ]]; then
+    log "careflow_rights mantido (registro de eliminações mais novo que o backup)"
+    continue
+  fi
+  docker exec -i "$POSTGRES_CONTAINER" pg_restore -U careflow -d "$database" --clean --if-exists \
+    --exit-on-error --single-transaction < "$work_dir/$database.dump" || die "falha ao restaurar $database"
+  log "$database restaurado"
+done
+
+careflow-deploy redeploy
+
+# Eliminações concluídas: reaplicar cada uma pela API do Rights, com o mesmo caminho do CI (fase 8).
+mapfile -t erasures < <(psql_owner careflow_rights -F ',' -c \
+  "SELECT id, tenant_id, patient_ref FROM subject_requests WHERE kind = 'Erasure' AND status = 'Completed';")
+
+keys_of_erased() {
+  local total=0 row tenant patient keys
+  for row in "${erasures[@]}"; do
+    IFS=',' read -r _ tenant patient <<< "$row"
+    keys="$(psql_owner careflow_vault -v tenant="$tenant" -v patient="$patient" \
+      <<< "SELECT count(*) FROM patient_keys WHERE tenant_id = :'tenant'::uuid AND patient_ref = :'patient'::uuid;")"
+    total=$((total + keys))
+  done
+  printf '%s' "$total"
+}
+log "chaves de pacientes já eliminados que voltaram com o backup: $(keys_of_erased)"
+for row in "${erasures[@]}"; do
+  IFS=',' read -r request tenant _ <<< "$row"
+  token="$(mint_token "$tenant" careflow-rights rights.admin)"
+  status="$(call_service POST "http://rights:8080/v1/subject-requests/$request/erasure-replay" "$token")"
+  [[ "$status" == "202" ]] || die "reaplicar a eliminação $request respondeu $status"
+done
+log "${#erasures[@]} eliminações reaplicadas; conferindo o cofre"
+
+remaining=0
+for _ in $(seq 1 20); do
+  remaining="$(keys_of_erased)"
+  [[ "$remaining" -eq 0 ]] && break
+  sleep 3
+done
+[[ "$remaining" -eq 0 ]] || die "$remaining chaves de pacientes eliminados continuam no cofre; confira o Rights e o broker"
+log "nenhum paciente eliminado tem chave no cofre"
+
+# A cadeia de cada clínica com eliminação reaplicada tem de fechar (as entradas da reaplicação entram nela).
+mapfile -t replayed_clinics < <(printf '%s\n' "${erasures[@]}" | cut -d, -f2 | sort -u | sed '/^$/d')
+for clinic in "${replayed_clinics[@]}"; do
+  token="$(mint_token "$clinic" careflow-audit audit.read)"
+  verification="$(call_service_body GET "http://audit:8080/v1/audit/verification" "$token")"
+  [[ "$verification" == *'"intact":true'* ]] || die "a cadeia da auditoria não fecha depois da restauração: $verification"
+done
+log "cadeia da auditoria íntegra em ${#replayed_clinics[@]} clínicas"
+
+# Clínicas que voltaram com o backup: apagar em todos os serviços, como o Demo faz no fim de cada sessão.
+mapfile -t clinics < <(psql_owner careflow_vault -c "SELECT DISTINCT tenant_id FROM patients;")
+for clinic in "${clinics[@]}"; do
+  [[ -n "$clinic" ]] || continue
+  for target in patient-vault:careflow-patient-vault consent:careflow-consent scheduling:careflow-scheduling \
+                notifications:careflow-notifications triage:careflow-triage rights:careflow-rights; do
+    token="$(mint_token "$clinic" "${target#*:}" demo.purge)"
+    status="$(call_service DELETE "http://${target%%:*}:8080/v1/demo/clinic-data" "$token")"
+    [[ "$status" == "200" ]] || die "apagar a clínica em ${target%%:*} respondeu $status"
+  done
+done
+log "${#clinics[@]} clínicas restauradas apagadas"
+
+careflow-deploy demo on
+log "restauração concluída"

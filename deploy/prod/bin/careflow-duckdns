@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Mantém o subdomínio DuckDNS apontando para o IP público da VM (ADR-0013).
+#   careflow-duckdns set       pergunta o subdomínio e o token (o token não aparece na tela nem no histórico)
+#   careflow-duckdns update    atualiza o IP; roda a cada 10 minutos pelo careflow-duckdns.timer
+# O token fica só em /etc/careflow/duckdns.env (root, 0600). Nunca cole o token no chat nem no repositório.
+set -euo pipefail
+umask 077
+ETC="${CAREFLOW_ETC:-/etc/careflow}"
+[[ "$(id -u)" -eq 0 ]] || { echo "rode como root (sudo)" >&2; exit 1; }
+
+case "${1:-}" in
+  set)
+    read -r -p "Subdomínio DuckDNS (só o nome, sem .duckdns.org): " domain
+    [[ "$domain" =~ ^[a-z0-9-]{1,63}$ ]] || { echo "subdomínio inválido" >&2; exit 1; }
+    read -r -s -p "Token do DuckDNS (não aparece enquanto digita): " token; echo
+    [[ "$token" =~ ^[0-9a-f-]{36}$ ]] || { echo "token com formato inesperado" >&2; exit 1; }
+    printf 'DUCKDNS_DOMAIN=%s\nDUCKDNS_TOKEN=%s\n' "$domain" "$token" > "$ETC/duckdns.env.tmp"
+    mv "$ETC/duckdns.env.tmp" "$ETC/duckdns.env"
+    unset token
+    exec "$0" update
+    ;;
+  update)
+    [[ -f "$ETC/duckdns.env" ]] || { echo "rode antes: sudo careflow-duckdns set" >&2; exit 1; }
+    domain="$(sed -n 's/^DUCKDNS_DOMAIN=//p' "$ETC/duckdns.env")"
+    token="$(sed -n 's/^DUCKDNS_TOKEN=//p' "$ETC/duckdns.env")"
+    # A URL com o token vai pelo stdin do curl (-K -), não pela linha de comando que outros processos enxergam.
+    # ip= vazio: o DuckDNS usa o IP de origem da chamada, que é o IP público da VM.
+    answer="$(printf 'url = "https://www.duckdns.org/update?domains=%s&token=%s&ip="\n' "$domain" "$token" \
+      | curl -fsS --proto '=https' --max-time 15 -K -)"
+    unset token
+    [[ "$answer" == "OK" ]] || { echo "DuckDNS respondeu: $answer" >&2; exit 1; }
+    echo "$domain.duckdns.org atualizado"
+    ;;
+  *)
+    sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

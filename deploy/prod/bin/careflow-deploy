@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+# Deploy, rollback e interruptor da demonstração hospedada (ADR-0013). Roda como root na VM.
+#
+#   careflow-deploy deploy <commit>   baixa deploy/ desse commit do GitHub, sobe as imagens <serviço>-<commit>,
+#                                     confere a saúde e, se falhar, volta sozinho para a versão anterior
+#   careflow-deploy rollback          volta para a versão anterior à atual
+#   careflow-deploy status            versão atual, estado dos containers e do Painel
+#   careflow-deploy demo on|off       liga ou desliga o Painel ao vivo sem redeploy (o site cai no replay)
+#   careflow-deploy redeploy          sobe de novo a versão atual (depois de trocar um segredo)
+#
+# O código que roda aqui vem sempre do repositório público, no commit pedido: quem tem a chave de deploy só
+# consegue escolher um commit que já existe, nunca mandar arquivos.
+set -euo pipefail
+umask 022
+
+REPOSITORY="${CAREFLOW_REPOSITORY:-cleberSan/careflow}"
+ROOT="${CAREFLOW_ROOT:-/opt/careflow}"
+ETC="${CAREFLOW_ETC:-/etc/careflow}"
+RELEASES="$ROOT/releases"
+STATE="$ROOT/state"
+SWITCH="$ETC/demo/demo-switch.json"
+# Só para a validação da stack no CI (workflow "Stack de produção"); na VM ficam vazios:
+#   CAREFLOW_COMPOSE_OVERRIDE  arquivo extra do compose dentro de deploy/prod (compose.ci.yaml)
+#   CAREFLOW_SKIP_PULL=1       usa as imagens já carregadas, sem puxar do GHCR
+#   CAREFLOW_HEALTH_INSECURE=1 a verificação de saúde aceita o certificado da CA local do Caddy (o teste de fumaça
+#                              do CI confere o certificado de verdade, com essa CA)
+OVERRIDE="${CAREFLOW_COMPOSE_OVERRIDE:-}"
+[[ -z "$OVERRIDE" || "$OVERRIDE" =~ ^compose\.[a-z]+\.yaml$ ]] || { echo "CAREFLOW_COMPOSE_OVERRIDE inválido" >&2; exit 2; }
+
+log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+die() { log "ERRO: $*" >&2; exit 1; }
+
+require_root() {
+  [[ "$(id -u)" -eq 0 ]] || die "rode como root"
+}
+
+lock() {
+  exec 9>/run/careflow-deploy.lock
+  flock -n 9 || die "outro deploy está em andamento"
+}
+
+valid_commit() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
+
+current_commit() {
+  [[ -L "$ROOT/current" ]] && basename "$(readlink -f "$ROOT/current")" || true
+}
+
+compose() {
+  local commit="$1"; shift
+  local files=(-f "$RELEASES/$commit/deploy/prod/compose.yaml")
+  [[ -z "$OVERRIDE" ]] || files+=(-f "$RELEASES/$commit/deploy/prod/$OVERRIDE")
+  CAREFLOW_TAG="$commit" docker compose -p careflow --env-file "$ETC/release.env" "${files[@]}" "$@"
+}
+
+fetch_release() {
+  local commit="$1" target="$RELEASES/$1"
+  [[ -f "$target/.complete" ]] && return 0
+  log "baixando deploy/ do commit $commit"
+  local work
+  work="$(mktemp -d "$RELEASES/.download-XXXXXX")"
+  # Só a pasta deploy/ do tarball do commit; nada de fora dela é extraído.
+  if ! curl -fsSL --proto '=https' --max-time 120 \
+      "https://codeload.github.com/$REPOSITORY/tar.gz/$commit" \
+      | tar -xz -C "$work" --strip-components=1 --wildcards '*/deploy/*'; then
+    rm -rf "$work"
+    die "não consegui baixar o commit $commit (ele existe no GitHub?)"
+  fi
+  [[ -f "$work/deploy/prod/compose.yaml" ]] || { rm -rf "$work"; die "o commit $commit não tem deploy/prod/compose.yaml"; }
+  chmod -R go-w "$work"
+  touch "$work/.complete"
+  rm -rf "$target"
+  mv "$work" "$target"
+}
+
+# Saúde vista de fora do Docker: TLS do Caddy, rota pública do Painel e resposta do Demo. Interruptor desligado
+# também conta como saudável (o Demo responde, só recusa sessões).
+healthy() {
+  local domain
+  domain="$(sed -n 's/^CAREFLOW_DOMAIN=//p' "$ETC/release.env")"
+  local body trust=()
+  [[ "${CAREFLOW_HEALTH_INSECURE:-}" != 1 ]] || trust=(--insecure)
+  for _ in $(seq 1 20); do
+    if body="$(curl -fsS --noproxy '*' --max-time 5 "${trust[@]}" -H 'X-CareFlow-Demo: 1' --resolve "$domain:443:127.0.0.1" \
+        "https://$domain/demo/v1/status" 2>/dev/null)" \
+        && [[ "$body" == *'"state"'* ]]; then
+      return 0
+    fi
+    sleep 6
+  done
+  return 1
+}
+
+start() {
+  local commit="$1"
+  if [[ "${CAREFLOW_SKIP_PULL:-}" != 1 ]]; then
+    log "puxando imagens de $commit"
+    compose "$commit" pull --quiet
+  fi
+  log "subindo $commit (migrations primeiro, depois os serviços)"
+  compose "$commit" up -d --wait --wait-timeout 600 --remove-orphans
+  healthy
+}
+
+install_scripts() {
+  local commit="$1" source="$RELEASES/$1/deploy/prod"
+  for script in "$source"/bin/careflow-*; do
+    install -o root -g root -m 0755 "$script" "/usr/local/sbin/$(basename "$script")"
+  done
+  for unit in "$source"/systemd/*; do
+    [[ -f "$unit" ]] && install -o root -g root -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
+  done
+  systemctl daemon-reload || true
+}
+
+prune() {
+  local keep=("$@")
+  for directory in "$RELEASES"/*; do
+    [[ -d "$directory" ]] || continue
+    local name skip=false
+    name="$(basename "$directory")"
+    for wanted in "${keep[@]}"; do [[ "$name" == "$wanted" ]] && skip=true; done
+    [[ "$skip" == true ]] || rm -rf "$directory"
+  done
+  docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
+}
+
+record() {
+  local commit="$1" previous="$2"
+  ln -sfn "$RELEASES/$commit" "$ROOT/current.tmp"
+  mv -T "$ROOT/current.tmp" "$ROOT/current"
+  printf 'current=%s\nprevious=%s\ndeployed_at=%s\n' "$commit" "$previous" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATE.tmp"
+  mv "$STATE.tmp" "$STATE"
+}
+
+deploy() {
+  local commit="$1"
+  valid_commit "$commit" || die "commit inválido (esperado o SHA completo de 40 caracteres)"
+  [[ -f "$ETC/env/.generated" ]] || die "segredos ausentes: rode careflow-generate-secrets antes"
+  [[ -f "$ETC/release.env" ]] || die "falta $ETC/release.env (domínio, origem do site, imagem)"
+  mkdir -p "$RELEASES"
+  lock
+
+  local previous
+  previous="$(current_commit)"
+  fetch_release "$commit"
+
+  if start "$commit"; then
+    record "$commit" "$previous"
+    install_scripts "$commit"
+    prune "$commit" "$previous"
+    log "OK: $commit no ar"
+    return 0
+  fi
+
+  log "a versão $commit não ficou saudável"
+  compose "$commit" ps --format 'table {{.Service}}\t{{.Status}}' || true
+  if [[ -n "$previous" && "$previous" != "$commit" ]]; then
+    log "voltando para $previous"
+    if start "$previous"; then
+      log "rollback concluído: $previous no ar"
+    else
+      log "o rollback também falhou; confira com: careflow-deploy status"
+    fi
+  fi
+  exit 1
+}
+
+rollback() {
+  [[ -f "$STATE" ]] || die "não há deploy anterior registrado"
+  local current previous
+  current="$(sed -n 's/^current=//p' "$STATE")"
+  previous="$(sed -n 's/^previous=//p' "$STATE")"
+  valid_commit "$previous" || die "não há versão anterior para voltar"
+  [[ -f "$RELEASES/$previous/.complete" ]] || fetch_release "$previous"
+  lock
+  log "voltando de $current para $previous"
+  start "$previous" || die "a versão $previous também não ficou saudável"
+  record "$previous" "$current"
+  log "OK: $previous no ar"
+}
+
+redeploy() {
+  local commit
+  commit="$(current_commit)"
+  valid_commit "$commit" || die "nada no ar ainda"
+  lock
+  start "$commit" || die "a versão $commit não ficou saudável depois do redeploy"
+  log "OK: $commit no ar de novo"
+}
+
+status() {
+  local commit
+  commit="$(current_commit)"
+  echo "versão no ar: ${commit:-nenhuma}"
+  [[ -f "$STATE" ]] && sed -n 's/^previous=/versão anterior: /p; s/^deployed_at=/deploy em: /p' "$STATE"
+  echo "interruptor: $(grep -q '"Enabled": *false' "$SWITCH" 2>/dev/null && echo desligado || echo ligado)"
+  if valid_commit "$commit"; then
+    compose "$commit" ps --format 'table {{.Service}}\t{{.Status}}'
+  fi
+}
+
+demo_switch() {
+  local value
+  case "${1:-}" in
+    on) value=true ;;
+    off) value=false ;;
+    *) die "use: careflow-deploy demo on|off" ;;
+  esac
+  mkdir -p "$(dirname "$SWITCH")"
+  # Troca atômica no mesmo diretório montado no Demo: ele relê o arquivo sozinho, sem reiniciar.
+  printf '{ "Demo": { "Switch": { "Enabled": %s } } }\n' "$value" > "$SWITCH.tmp"
+  chmod 0644 "$SWITCH.tmp"
+  mv "$SWITCH.tmp" "$SWITCH"
+  log "Painel ao vivo: $([[ "$value" == true ]] && echo ligado || echo 'desligado (sessões abertas terminam na próxima rodada de limpeza)')"
+}
+
+main() {
+  require_root
+  case "${1:-}" in
+    deploy) [[ $# -eq 2 ]] || die "use: careflow-deploy deploy <commit>"; deploy "$2" ;;
+    rollback) rollback ;;
+    redeploy) redeploy ;;
+    status) status ;;
+    demo) [[ $# -eq 2 ]] || die "use: careflow-deploy demo on|off"; demo_switch "$2" ;;
+    *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  esac
+}
+
+main "$@"

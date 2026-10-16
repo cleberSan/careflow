@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Backup diário dos sete bancos da demonstração hospedada para o Object Storage da Oracle (ADR-0013).
+# Roda pelo timer careflow-backup.timer. O bucket apaga sozinho o que tiver mais de 7 dias (regra de ciclo de vida).
+# A VM se autentica como instance principal: nenhuma chave da Oracle fica na VM.
+#   careflow-backup            dump, conferência e envio ao bucket
+#   careflow-backup --local    só o dump e o SHA256SUMS em /var/backups/careflow (validação no CI, sem a Oracle)
+set -euo pipefail
+umask 077
+# shellcheck source=careflow-common.sh
+source "$(dirname "$(readlink -f "$0")")/careflow-common.sh"
+
+require_root
+upload=true
+[[ "${1:-}" == "--local" ]] && upload=false
+[[ "$upload" == true ]] && load_backup_settings
+
+id="$(date -u +%Y%m%dT%H%M%SZ)"
+local_dir="${CAREFLOW_BACKUP_DIR:-/var/backups/careflow}/$id"
+mkdir -p "$local_dir"
+
+for database in "${DATABASES[@]}"; do
+  # Formato custom (comprimido, restauração seletiva). Papéis e permissões vão junto: o init.sh recria os mesmos
+  # nomes em qualquer VM nova, então a restauração encontra os donos e as políticas de RLS.
+  docker exec "$POSTGRES_CONTAINER" pg_dump -U careflow -d "$database" -Fc -Z 6 > "$local_dir/$database.dump"
+  [[ -s "$local_dir/$database.dump" ]] || die "dump vazio de $database"
+done
+(cd "$local_dir" && sha256sum ./*.dump | sed 's# \./# #' > SHA256SUMS)
+
+if [[ "$upload" == false ]]; then
+  log "backup local $id em $local_dir ($(du -sh "$local_dir" | cut -f1))"
+  exit 0
+fi
+
+for file in "$local_dir"/*.dump "$local_dir/SHA256SUMS"; do
+  # SHA256SUMS por último: um backup só aparece como completo depois que tudo subiu.
+  [[ "$file" == "$local_dir/SHA256SUMS" ]] && continue
+  oci_os put --name "careflow/$id/$(basename "$file")" --file "$file" --force >/dev/null
+done
+oci_os put --name "careflow/$id/SHA256SUMS" --file "$local_dir/SHA256SUMS" --force >/dev/null
+
+# Cópia local só dos dois últimos dias, para uma restauração rápida sem baixar.
+find "${CAREFLOW_BACKUP_DIR:-/var/backups/careflow}" -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} +
+log "backup $id enviado ($(du -sh "$local_dir" | cut -f1))"

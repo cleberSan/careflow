@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Ensaio de restauração (ADR-0013), semanal pelo timer careflow-restore-drill.timer ou à mão:
+#   careflow-restore-drill [AAAAMMDDTHHMMSSZ]     (sem argumento: o último backup completo do bucket)
+#
+# Baixa o backup do Object Storage, confere os SHA256, restaura os sete bancos num Postgres descartável e sem rede,
+# e confere o registro de eliminações da fase 8: toda eliminação concluída no backup do Rights cujo paciente ainda
+# tem chave (DEK) no backup do cofre é uma que a restauração de verdade (careflow-restore) precisa reaplicar.
+# Não toca na stack no ar. Sai com erro se qualquer banco não restaurar.
+set -euo pipefail
+umask 077
+# shellcheck source=careflow-common.sh
+source "$(dirname "$(readlink -f "$0")")/careflow-common.sh"
+
+require_root
+if [[ -n "${1:-}" && -d "$1" ]]; then
+  # Pasta local já baixada (usado pelos testes do CI e depois de um careflow-backup na mesma VM).
+  work_dir="$1"
+  (cd "$work_dir" && sha256sum --quiet -c SHA256SUMS) || die "a pasta $work_dir não confere com o SHA256SUMS"
+  id="$(basename "$work_dir")"
+  cleanup_dir=false
+else
+  load_backup_settings
+  id="${1:-$(latest_backup)}"
+  [[ -n "$id" ]] || die "nenhum backup completo no bucket"
+  work_dir="$(mktemp -d /var/tmp/careflow-drill-XXXXXX)"
+  cleanup_dir=true
+  download_backup "$id" "$work_dir"
+fi
+
+scratch="careflow-restore-drill-$$"
+cleanup() {
+  docker rm -f "$scratch" >/dev/null 2>&1 || true
+  if [[ "$cleanup_dir" == true ]]; then rm -rf "$work_dir"; fi
+}
+trap cleanup EXIT
+
+drill_password="$(openssl rand -hex 16)"
+docker run -d --name "$scratch" --network none --tmpfs /var/lib/postgresql/data:size=2g \
+  -e POSTGRES_USER=careflow -e POSTGRES_PASSWORD="$drill_password" -e POSTGRES_DB=postgres \
+  "$SCRATCH_POSTGRES_IMAGE" >/dev/null
+for _ in $(seq 1 30); do
+  docker exec "$scratch" pg_isready -U careflow -d postgres >/dev/null 2>&1 && break
+  sleep 1
+done
+
+scratch_psql() {
+  local database="$1"; shift
+  docker exec -i "$scratch" psql -v ON_ERROR_STOP=1 -X -q -A -t -U careflow -d "$database" "$@"
+}
+
+# Os mesmos papéis do init.sh, sem login: a restauração só precisa que os donos e os alvos das políticas existam.
+for prefix in "${SERVICE_PREFIXES[@]}"; do
+  scratch_psql postgres <<SQL
+CREATE ROLE ${prefix}_owner NOLOGIN; CREATE ROLE ${prefix}_app NOLOGIN; CREATE ROLE ${prefix}_relay NOLOGIN;
+CREATE ROLE ${prefix}_api NOLOGIN IN ROLE ${prefix}_app; CREATE ROLE ${prefix}_dispatcher NOLOGIN IN ROLE ${prefix}_relay;
+SQL
+done
+
+for index in "${!DATABASES[@]}"; do
+  database="${DATABASES[$index]}"
+  [[ -f "$work_dir/$database.dump" ]] || die "o backup $id não tem $database"
+  scratch_psql postgres -c "CREATE DATABASE $database OWNER ${SERVICE_PREFIXES[$index]}_owner;"
+  docker exec -i "$scratch" pg_restore -U careflow -d "$database" --exit-on-error --single-transaction \
+    < "$work_dir/$database.dump" || die "falha ao restaurar $database"
+  migrations="$(scratch_psql "$database" -c 'SELECT count(*) FROM "__EFMigrationsHistory";')"
+  [[ "$migrations" -gt 0 ]] || die "$database restaurou sem histórico de migrations"
+  log "$database restaurado ($migrations migrations)"
+done
+
+# Registro de eliminações: concluídas no Rights x chaves que ainda existem no cofre restaurado.
+erasures="$(scratch_psql careflow_rights -F ',' -c \
+  "SELECT tenant_id, patient_ref FROM subject_requests WHERE kind = 'Erasure' AND status = 'Completed';")"
+total=0
+pending=0
+while IFS=',' read -r tenant patient; do
+  [[ -n "$tenant" ]] || continue
+  total=$((total + 1))
+  keys="$(scratch_psql careflow_vault -v tenant="$tenant" -v patient="$patient" \
+    <<< "SELECT count(*) FROM patient_keys WHERE tenant_id = :'tenant'::uuid AND patient_ref = :'patient'::uuid;")"
+  [[ "$keys" -gt 0 ]] && pending=$((pending + 1))
+done <<< "$erasures"
+
+chain="$(scratch_psql careflow_audit -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")"
+log "ensaio do backup $id OK: 7 bancos restaurados, $chain tabelas na auditoria"
+log "eliminações concluídas no backup: $total; a reaplicar numa restauração real: $pending"

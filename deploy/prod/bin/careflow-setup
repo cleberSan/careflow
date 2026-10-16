@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Configuração da VM depois do cloud-init (ADR-0013). Rode uma vez, por SSH: sudo careflow-setup
+# Pergunta o que é da sua conta (domínio, e-mail, bucket, chave do vault, chave pública de deploy), grava em
+# /etc/careflow e gera os segredos na própria VM. Pode rodar de novo: cada pergunta mostra o valor atual.
+#
+# Nenhuma senha, token ou chave privada sai daqui. O token do DuckDNS é digitado escondido e fica só na VM.
+set -euo pipefail
+umask 077
+ETC="${CAREFLOW_ETC:-/etc/careflow}"
+[[ "$(id -u)" -eq 0 ]] || { echo "rode como root (sudo careflow-setup)" >&2; exit 1; }
+mkdir -p "$ETC"
+
+current() { [[ -f "$2" ]] && sed -n "s/^$1=//p" "$2" || true; }
+
+ask() {
+  local prompt="$1" default="$2" pattern="$3" answer
+  while true; do
+    read -r -p "$prompt${default:+ [$default]}: " answer
+    answer="${answer:-$default}"
+    [[ "$answer" =~ $pattern ]] && { printf '%s' "$answer"; return 0; }
+    echo "  formato inválido, tente de novo" >&2
+  done
+}
+
+echo "== Domínio (DuckDNS)"
+if [[ ! -f "$ETC/duckdns.env" ]] || [[ "$(ask 'Trocar subdomínio ou token do DuckDNS? (s/n)' n '^[sn]$')" == s ]]; then
+  careflow-duckdns set
+fi
+domain="$(current DUCKDNS_DOMAIN "$ETC/duckdns.env").duckdns.org"
+
+echo "== Site e certificado"
+site_origin="$(ask 'Endereço do site (origem que pode chamar o backend)' \
+  "$(o="$(current CAREFLOW_SITE_ORIGIN "$ETC/release.env")"; echo "${o:-https://portfolio-web-psi-rust.vercel.app}")" '^https://[a-z0-9.-]+$')"
+acme_email="$(ask "E-mail para avisos do Let's Encrypt" \
+  "$(current CAREFLOW_ACME_EMAIL "$ETC/release.env")" '^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$')"
+cat > "$ETC/release.env.tmp" <<ENV
+CAREFLOW_DOMAIN=$domain
+CAREFLOW_SITE_ORIGIN=$site_origin
+CAREFLOW_ACME_EMAIL=$acme_email
+CAREFLOW_IMAGE=ghcr.io/clebersan/careflow
+ENV
+chmod 0644 "$ETC/release.env.tmp"
+mv "$ETC/release.env.tmp" "$ETC/release.env"
+
+echo "== Backup (Object Storage)"
+namespace="$(oci --auth instance_principal os ns get --query data --raw-output 2>/dev/null || true)"
+namespace="$(ask 'Namespace do Object Storage' "${namespace:-$(current OCI_NAMESPACE "$ETC/backup.env")}" '^[a-z0-9]+$')"
+bucket="$(ask 'Nome do bucket' "$(current OCI_BUCKET "$ETC/backup.env" || true)" '^[A-Za-z0-9._-]+$')"
+printf 'OCI_NAMESPACE=%s\nOCI_BUCKET=%s\n' "$namespace" "$bucket" > "$ETC/backup.env"
+
+echo "== Chave do cofre (OCI Vault)"
+vault_endpoint="$(ask 'Cryptographic endpoint do vault' \
+  "$(current KeyManagement__OciVault__CryptoEndpoint "$ETC/env/patient-vault.env")" '^https://[a-z0-9.-]+\.oraclecloud\.com/?$')"
+key_id="$(ask 'OCID da chave (ocid1.key...)' \
+  "$(current KeyManagement__OciVault__KeyId "$ETC/env/patient-vault.env")" '^ocid1\.key\.[a-z0-9._-]+$')"
+
+echo "== Chave pública de deploy (a linha do arquivo .pub; a privada vai só para o secret do GitHub)"
+existing_key="$(sed -n 's/^restrict,command="[^"]*" //p' /home/deploy/.ssh/authorized_keys 2>/dev/null || true)"
+deploy_key="$(ask 'Chave pública ssh-ed25519' "$existing_key" '^ssh-ed25519 [A-Za-z0-9+/=]+( [^[:space:]]+)?$')"
+install -d -o deploy -g deploy -m 0700 /home/deploy/.ssh
+printf 'restrict,command="/usr/local/sbin/careflow-deploy-ssh" %s\n' "$deploy_key" > /home/deploy/.ssh/authorized_keys
+chown deploy:deploy /home/deploy/.ssh/authorized_keys
+chmod 0600 /home/deploy/.ssh/authorized_keys
+
+echo "== Segredos"
+if [[ -f "$ETC/env/.generated" ]]; then
+  careflow-generate-secrets --update-vault --vault-endpoint "$vault_endpoint" --key-id "$key_id"
+else
+  careflow-generate-secrets --vault-endpoint "$vault_endpoint" --key-id "$key_id"
+fi
+
+systemctl enable --now careflow-duckdns.timer careflow-backup.timer careflow-restore-drill.timer >/dev/null
+echo
+echo "Pronto. Backend: https://$domain"
+echo "Próximo passo: rode o workflow 'Deploy da demonstração' no GitHub Actions."
+echo "Se já havia uma versão no ar e você mudou domínio, origem ou chave do vault: sudo careflow-deploy redeploy"
