@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Para onde o teste de fumaça aponta e como ele se conecta (ADR-0013). Fica numa biblioteca à parte porque o
+    coverlet não instrumenta de forma estável o próprio executável de testes: aqui a leitura da configuração é medida
+    como qualquer outro código.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CareFlow.SmokeTests" />
+  </ItemGroup>
+
+</Project>

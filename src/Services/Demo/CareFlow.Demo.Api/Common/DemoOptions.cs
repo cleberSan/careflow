@@ -66,6 +66,36 @@ internal sealed class DemoOptions
 
     [Required]
     public DemoRateLimits RateLimits { get; set; } = new();
+
+    /// <summary>
+    /// Arquivo onde ficam as clínicas criadas e ainda não apagadas. Sobrevive a um reinício do Demo (deploy, queda),
+    /// e a limpeza termina o que ficou para trás antes de abrir sessões novas (ADR-0013). Vazio: só em memória.
+    /// </summary>
+    public string? LedgerPath { get; set; }
+
+    [Required]
+    public DemoProxyOptions Proxy { get; set; } = new();
+}
+
+/// <summary>
+/// Proxy reverso na frente do Demo (Caddy, na demonstração hospedada). Sem ele configurado, o endereço de origem é o
+/// da conexão; com ele, o Demo aceita <c>X-Forwarded-For</c> só de quem está nessas redes e só um salto.
+/// </summary>
+internal sealed class DemoProxyOptions
+{
+    /// <summary>Redes do proxy em notação CIDR (por exemplo <c>172.30.0.0/24</c>).</summary>
+    public List<string> KnownNetworks { get; set; } = [];
+}
+
+/// <summary>
+/// Interruptor do Demo, lido de um arquivo recarregado sem reiniciar (<c>Demo:SwitchFile</c>). Desligado, o Demo
+/// recusa sessões novas, encerra as abertas e o Painel cai sozinho para o replay das gravações (ADR-0013).
+/// </summary>
+internal sealed class DemoSwitchOptions
+{
+    public const string SectionName = "Demo:Switch";
+
+    public bool Enabled { get; set; } = true;
 }
 
 internal sealed class DemoServiceAddresses
@@ -101,7 +131,11 @@ internal sealed class DemoRateLimits
     [Range(typeof(TimeSpan), "00:00:01", "01:00:00")]
     public TimeSpan SessionWindow { get; set; } = TimeSpan.FromMinutes(10);
 
-    /// <summary>Requisições por sessão por minuto (balde de fichas).</summary>
+    /// <summary>Requisições por endereço de origem por minuto, somando todas as rotas e sessões dele.</summary>
+    [Range(1, 10_000)]
+    public int RequestsPerMinutePerAddress { get; set; } = 120;
+
+    /// <summary>Requisições por sessão (e portanto por clínica sintética) por minuto (balde de fichas).</summary>
     [Range(1, 10_000)]
     public int RequestsPerMinute { get; set; } = 60;
 }

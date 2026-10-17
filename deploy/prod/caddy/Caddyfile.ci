@@ -1,0 +1,15 @@
+# Validação da stack de produção no CI (ADR-0013): mesmo site, certificado de uma CA local do próprio Caddy em vez
+# do Let's Encrypt. Nunca usado na VM.
+{
+	admin off
+	local_certs
+	skip_install_trust
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$CAREFLOW_DOMAIN}:443 {
+	tls internal
+	import site.caddy
+}

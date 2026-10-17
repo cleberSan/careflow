@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Comando forçado da chave de deploy (authorized_keys do usuário "deploy", ADR-0013). O GitHub Actions só
+# consegue pedir um destes comandos; qualquer outra coisa, inclusive shell, é recusada.
+set -euo pipefail
+
+read -r -a words <<< "${SSH_ORIGINAL_COMMAND:-}"
+case "${words[0]:-}" in
+  deploy)
+    [[ ${#words[@]} -eq 2 && "${words[1]}" =~ ^[0-9a-f]{40}$ ]] || { echo "use: deploy <commit de 40 caracteres>" >&2; exit 2; } ;;
+  rollback|status)
+    [[ ${#words[@]} -eq 1 ]] || { echo "use: ${words[0]}" >&2; exit 2; } ;;
+  demo)
+    [[ ${#words[@]} -eq 2 && "${words[1]}" =~ ^(on|off)$ ]] || { echo "use: demo on|off" >&2; exit 2; } ;;
+  *)
+    echo "comando não permitido" >&2
+    exit 2 ;;
+esac
+
+logger -t careflow-deploy "pedido pela chave de deploy: ${words[*]}"
+exec sudo -n /usr/local/sbin/careflow-deploy "${words[@]}"

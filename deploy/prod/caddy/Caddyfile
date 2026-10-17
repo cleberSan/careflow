@@ -1,0 +1,18 @@
+# Entrada da demonstração hospedada (ADR-0013). Só HTTPS na 443: o certificado do Let's Encrypt sai pelo desafio
+# TLS-ALPN-01 na própria 443, então a porta 80 fica fechada no firewall.
+{
+	email {$CAREFLOW_ACME_EMAIL}
+	admin off
+	servers {
+		# Sem HTTP/3: a VM só abre TCP 443.
+		protocols h1 h2
+	}
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+	cert_issuer acme {
+		disable_http_challenge
+	}
+}
+
+{$CAREFLOW_DOMAIN}:443 {
+	import site.caddy
+}

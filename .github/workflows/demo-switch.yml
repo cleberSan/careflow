@@ -1,0 +1,64 @@
+name: Interruptor do Painel ao vivo
+
+# Liga ou desliga o Painel ao vivo sem redeploy (ADR-0013). Desligado, o backend recusa sessões novas, encerra as
+# abertas na próxima rodada de limpeza e o site cai no replay. Pede a mesma aprovação do deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      state:
+        description: "Estado do Painel ao vivo"
+        required: true
+        type: choice
+        options: ["off", "on"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  switch:
+    name: Painel ao vivo ${{ inputs.state }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - name: Preparar SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.CAREFLOW_DEMO_HOST }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 0600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host careflow\n  HostName %s\n  User deploy\n  IdentityFile ~/.ssh/deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' "$HOST" > ~/.ssh/config
+
+      - name: Trocar o interruptor
+        env:
+          STATE: ${{ inputs.state }}
+        run: |
+          [[ "$STATE" == "on" || "$STATE" == "off" ]] || exit 1
+          # shellcheck disable=SC2029 # o estado é expandido aqui de propósito, já validado acima
+          ssh careflow "demo $STATE"
+
+      - name: Conferir pelo endereço público
+        env:
+          HOST: ${{ vars.CAREFLOW_DEMO_HOST }}
+          ORIGIN: ${{ vars.CAREFLOW_SITE_ORIGIN }}
+          STATE: ${{ inputs.state }}
+        run: |
+          expected=$([[ "$STATE" == "on" ]] && echo '"available":true' || echo '"state":"desligado"')
+          for _ in $(seq 1 12); do
+            body="$(curl -fsS -H 'X-CareFlow-Demo: 1' -H "Origin: $ORIGIN" "https://$HOST/demo/v1/status" || true)"
+            [[ "$body" == *"$expected"* ]] && { echo "$body"; exit 0; }
+            sleep 5
+          done
+          echo "::error::O estado público não mudou: $body"; exit 1
+
+      - name: Apagar a chave do runner
+        if: always()
+        run: rm -f ~/.ssh/deploy

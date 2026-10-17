@@ -1,0 +1,70 @@
+name: Imagens
+
+# Imagens arm64 dos oito serviços para a VM da Oracle (ADR-0013), num pacote só do GHCR:
+# ghcr.io/clebersan/careflow:<serviço>-<commit>. Em PR só compila (nada é publicado); na main, publica a cada
+# commit, para qualquer commit da main poder ir para o ar. Só actions do próprio GitHub: o buildx e o login
+# são os do Docker que já vem no runner, sem action de terceiros com tag móvel.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["src/**", "deploy/docker/**", "eval/triage/recordings/**", "Directory.*.props", "global.json", ".github/workflows/images.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/clebersan/careflow
+
+jobs:
+  image:
+    name: Imagem ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: patient-vault, project: PatientVault }
+          - { name: consent, project: Consent }
+          - { name: scheduling, project: Scheduling }
+          - { name: notifications, project: Notifications }
+          - { name: audit, project: Audit }
+          - { name: triage, project: Triage }
+          - { name: rights, project: Rights }
+          - { name: demo, project: Demo }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Preparar o buildx
+        run: docker buildx create --use --name careflow
+
+      - name: Entrar no GHCR
+        if: github.event_name != 'pull_request'
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      # O SDK compila na arquitetura do runner; só o runtime é arm64, sem emulação (Dockerfile).
+      - name: Compilar${{ github.event_name != 'pull_request' && ' e publicar' || '' }}
+        env:
+          SERVICE: ${{ matrix.service.project }}
+          TAG: ${{ env.IMAGE }}:${{ matrix.service.name }}-${{ github.sha }}
+          PUSH: ${{ github.event_name != 'pull_request' }}
+        run: |
+          output=()
+          [[ "$PUSH" != true ]] || output=(--push)
+          docker buildx build --platform linux/arm64 --provenance=false \
+            --build-arg SERVICE="$SERVICE" --build-arg REVISION="$GITHUB_SHA" \
+            -t "$TAG" -f deploy/docker/Dockerfile "${output[@]}" .

@@ -25,8 +25,14 @@ internal static class InternalServiceAuthentication
         IHostEnvironment environment)
     {
         var section = configuration.GetSection(SectionName);
-        var publicKey = section["PublicKey"];
-        if (!string.IsNullOrWhiteSpace(publicKey) && environment.IsProduction())
+
+        // Uma chave pública por serviço que chama o cofre (Notifications, Triage): cada um assina com o próprio par,
+        // e trocar o par de um não mexe no do outro (ADR-0013). PublicKey continua valendo para o par único local.
+        var publicKeys = new[] { section["PublicKey"] }
+            .Concat(section.GetSection("AdditionalPublicKeys").GetChildren().Select(child => child.Value))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToList();
+        if (publicKeys.Count > 0 && environment.IsProduction())
         {
             throw new InvalidOperationException(
                 "O emissor interno local de tokens de serviço não pode ser usado em produção. Use client credentials do IdP.");
@@ -34,8 +40,8 @@ internal static class InternalServiceAuthentication
 
         var issuer = section["Issuer"] is { Length: > 0 } configured ? configured : DefaultIssuer;
 
-        // Carregada já no registro: chave inválida derruba a subida, não a primeira chamada.
-        var signingKey = string.IsNullOrWhiteSpace(publicKey) ? null : LoadPublicKey(publicKey);
+        // Carregadas já no registro: chave inválida derruba a subida, não a primeira chamada.
+        var signingKeys = publicKeys.Select(key => LoadPublicKey(key!)).ToList();
         return builder.AddJwtBearer(SchemeName, options =>
         {
             options.MapInboundClaims = false;
@@ -49,7 +55,7 @@ internal static class InternalServiceAuthentication
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.FromSeconds(30),
                 // Sem chave configurada o esquema existe, mas não valida nenhum token (falha fechada).
-                IssuerSigningKey = signingKey,
+                IssuerSigningKeys = signingKeys,
             };
         });
     }

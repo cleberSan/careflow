@@ -1,7 +1,7 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "include": "[CareFlow.PatientVault.Domain]*",
+      "include": "[CareFlow.PatientVault.Domain]*,[CareFlow.PatientVault.Api]CareFlow.PatientVault.Api.Cryptography.KeyManagement.*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

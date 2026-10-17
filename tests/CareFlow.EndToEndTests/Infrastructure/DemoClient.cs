@@ -11,8 +11,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace CareFlow.EndToEndTests.Infrastructure;
 
 /// <summary>
-/// Um visitante do Painel: fala só com o Demo, como a rota do site faria, com o cookie de sessão e o cabeçalho
-/// anti-CSRF. HTTPS, porque o cookie <c>__Host-</c> só existe com Secure.
+/// Um visitante do Painel: fala só com o Demo, como a página do site faz, com o token da sessão no cabeçalho
+/// <c>Authorization</c> e o cabeçalho anti-CSRF.
 /// </summary>
 internal sealed class DemoClient : IDisposable
 {
@@ -23,7 +23,7 @@ internal sealed class DemoClient : IDisposable
     public DemoClient(WebApplicationFactory<demo::Program> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        _http = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost/"), HandleCookies = true });
+        _http = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost/"), HandleCookies = false });
         _http.DefaultRequestHeaders.Add("X-CareFlow-Demo", "1");
         _http.DefaultRequestHeaders.Add("Origin", SiteOrigin);
     }
@@ -34,13 +34,24 @@ internal sealed class DemoClient : IDisposable
 
     public SessionView Session { get; private set; } = null!;
 
-    public async Task<HttpResponseMessage> OpenRawAsync() => await _http.PostAsync("demo/v1/sessions", null, Ct);
+    /// <summary>Abre a sessão; quando ela abre, guarda o token para as chamadas seguintes, como a página do site.</summary>
+    public async Task<HttpResponseMessage> OpenRawAsync()
+    {
+        var response = await _http.PostAsync("demo/v1/sessions", null, Ct);
+        if (response.StatusCode == HttpStatusCode.Created)
+        {
+            await response.Content.LoadIntoBufferAsync(Ct);
+            Session = (await response.Content.ReadFromJsonAsync<SessionView>(Ct))!;
+            _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Session.Token);
+        }
+
+        return response;
+    }
 
     public async Task<SessionView> OpenAsync()
     {
         var response = await OpenRawAsync();
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Session = (await response.Content.ReadFromJsonAsync<SessionView>(Ct))!;
         return Session;
     }
 

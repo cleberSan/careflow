@@ -175,7 +175,9 @@ unset DEMO_KEY
 dotnet run --project src/Services/Demo/CareFlow.Demo.Api
 ```
 
-O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o cenário dos direitos do titular, ligue também `Demo:SimulatedInboxEnabled` no Notifications. Para o Notifications aceitar partições isoladas, ligue `FaultInjection:Enabled`, `FaultInjection:ClinicOverridesEnabled` e `FaultInjection:IsolatedSlots` (por exemplo 8) nos user secrets dele. Com a stack de observabilidade de pé, o Demo lê traces do Tempo e logs do Loki; sem ela, o Painel mostra que a telemetria não está disponível. A sessão é um cookie `__Host-` e toda chamada precisa do cabeçalho `X-CareFlow-Demo: 1`; exemplos em `CareFlow.Demo.Api.http`.
+O índice 9 evita sobrescrever a chave do `dotnet user-jwts` (índice 0). Para o cenário dos direitos do titular, ligue também `Demo:SimulatedInboxEnabled` no Notifications. Para o Notifications aceitar partições isoladas, ligue `FaultInjection:Enabled`, `FaultInjection:ClinicOverridesEnabled` e `FaultInjection:IsolatedSlots` (por exemplo 8) nos user secrets dele. Com a stack de observabilidade de pé, o Demo lê traces do Tempo e logs do Loki; sem ela, o Painel mostra que a telemetria não está disponível. A sessão é um token opaco que sai no corpo do `POST /demo/v1/sessions` e volta no cabeçalho `Authorization: Bearer` (o site e o backend hospedado são sites diferentes, então não há cookie; ADR-0013). Toda chamada precisa também do cabeçalho `X-CareFlow-Demo: 1`; exemplos em `CareFlow.Demo.Api.http`.
+
+Outras chaves do Demo, todas opcionais localmente: `Demo:SwitchFile` (JSON com `Demo:Switch:Enabled`, relido sem reiniciar: é o interruptor do Painel ao vivo), `Demo:LedgerPath` (registro em arquivo das clínicas criadas, para a limpeza sobreviver a um reinício), `Demo:Proxy:KnownNetworks` (redes do proxy de quem o `X-Forwarded-For` é aceito) e `Demo:RateLimits:RequestsPerMinutePerAddress`.
 
 ### Gravação do Painel
 
@@ -209,3 +211,16 @@ Toda tabela nova com `tenant_id` precisa de `EnableTenantRowLevelSecurity` na mi
 - Testes no padrão AAA (Arrange, Act, Assert), cobrindo cenários felizes, de erro e limites.
 - Regras de negócio retornam `Result`; não use exceptions para fluxo.
 - Nunca registre dados pessoais em logs, mensagens de erro ou testes. Use dados sintéticos (`SyntheticPatients` em `tests/CareFlow.Testing`).
+
+### Demonstração hospedada (fase 9)
+
+O backend do Painel roda numa VM gratuita da Oracle com `deploy/prod/compose.yaml` (ADR-0013). O passo a passo de criação e operação está em [docs/operacao/demonstracao-hospedada.md](docs/operacao/demonstracao-hospedada.md). Para validar a stack de produção na sua máquina, sem a Oracle, o workflow **Stack de produção** (`.github/workflows/prod-stack.yml`) mostra a sequência: imagens x64, `careflow-generate-secrets` numa pasta temporária, `deploy/prod/compose.ci.yaml` por cima do compose (ambiente `Staging`, chave mestra local, CA local do Caddy) e o teste de fumaça:
+
+```bash
+CAREFLOW_SMOKE_URL=https://demo.careflow.test CAREFLOW_SMOKE_ORIGIN=https://site.careflow.test \
+CAREFLOW_SMOKE_CONNECT=127.0.0.1:443 CAREFLOW_SMOKE_CA=/caminho/para/root.crt \
+  dotnet test --project tests/CareFlow.SmokeTests -c Release
+```
+
+Sem `CAREFLOW_SMOKE_URL` os testes de fumaça são pulados. O ambiente `Demo` recusa o provedor local de chaves (use `KeyManagement:Provider=OciVault`) e o modelo real da triagem sem `Triage:Model:LiveCallsEnabled=true`. Os serviços aceitam `--health-probe <url de loopback>` como healthcheck e `Database:MigrateAndExit=true` para só aplicar as migrations e sair.
+

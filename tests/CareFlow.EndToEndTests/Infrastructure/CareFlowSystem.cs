@@ -179,6 +179,7 @@ public sealed class CareFlowSystem : IAsyncLifetime
             builder.UseSetting("Demo:AllowedOrigins:0", DemoClient.SiteOrigin);
             builder.UseSetting("Demo:RateLimits:SessionsPerWindow", "1000");
             builder.UseSetting("Demo:RateLimits:RequestsPerMinute", "1000");
+            builder.UseSetting("Demo:RateLimits:RequestsPerMinutePerAddress", "10000");
             foreach (var (name, host) in hosts)
             {
                 builder.UseSetting($"Demo:Services:{char.ToUpperInvariant(name[0])}{name[1..]}", host.BaseAddress!.ToString());

@@ -5,8 +5,8 @@ namespace CareFlow.PatientVault.Api.Cryptography.KeyManagement;
 /// <summary>
 /// Serviço de gestão de chaves (KMS) que guarda a chave mestra (KEK) e cifra/decifra as chaves de dados
 /// das clínicas (DEK). A KEK nunca sai do provedor; o cofre só vê DEKs cifradas no banco e, em memória,
-/// as DEKs decifradas que estão em uso. Implementações: local (desenvolvimento e testes) e, quando a nuvem
-/// for escolhida, Azure Key Vault ou AWS KMS.
+/// as DEKs decifradas que estão em uso. Implementações: local (desenvolvimento e testes) e OCI Vault
+/// (demonstração hospedada, ADR-0013).
 /// </summary>
 public interface IKeyManagementService
 {

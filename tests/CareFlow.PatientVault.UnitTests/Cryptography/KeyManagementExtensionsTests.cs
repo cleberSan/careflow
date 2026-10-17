@@ -10,13 +10,15 @@ namespace CareFlow.PatientVault.UnitTests.Cryptography;
 
 public sealed class KeyManagementExtensionsTests
 {
-    private static IConfiguration Config(string? provider) =>
+    private static IConfiguration Config(string? provider, string endpoint = "https://crypto.exemplo/", string keyId = "ocid1.key.oc1.exemplo") =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["KeyManagement:Provider"] = provider,
                 ["KeyManagement:Local:ActiveKeyId"] = "k1",
                 ["KeyManagement:Local:Keys:k1"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["KeyManagement:OciVault:CryptoEndpoint"] = endpoint,
+                ["KeyManagement:OciVault:KeyId"] = keyId,
             })
             .Build();
 
@@ -35,14 +37,49 @@ public sealed class KeyManagementExtensionsTests
         Assert.IsType<LocalKeyManagementService>(provider.GetRequiredService<IKeyManagementService>());
     }
 
-    [Fact]
-    public void Local_InProduction_IsRefused()
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Demo")]
+    public void Local_InAnInternetFacingEnvironment_IsRefused(string environment)
     {
         // Act
-        var act = () => new ServiceCollection().AddKeyManagement(Config("Local"), new FakeEnvironment(Environments.Production));
+        var act = () => new ServiceCollection().AddKeyManagement(Config("Local"), new FakeEnvironment(environment));
 
         // Assert
         Assert.Throws<InvalidOperationException>(act);
+    }
+
+    [Fact]
+    public void OciVault_InTheHostedDemo_RegistersTheVaultProvider()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddKeyManagement(Config("OciVault"), new FakeEnvironment("Demo"));
+        using var provider = services.BuildServiceProvider();
+        provider.ValidateKeyManagementOnStart();
+
+        // Assert
+        Assert.IsType<OciVaultKeyManagementService>(provider.GetRequiredService<IKeyManagementService>());
+    }
+
+    [Theory]
+    [InlineData("http://crypto.exemplo/", "ocid1.key.oc1.exemplo")]
+    [InlineData("https://crypto.exemplo/", "chave-qualquer")]
+    [InlineData("https://crypto.exemplo/", "")]
+    public void OciVault_WithInsecureEndpointOrInvalidKey_FailsValidation(string endpoint, string keyId)
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddKeyManagement(Config("OciVault", endpoint, keyId), new FakeEnvironment("Demo"));
+        using var provider = services.BuildServiceProvider();
+
+        // Act
+        var act = () => provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OciVaultKeyManagementOptions>>().Value;
+
+        // Assert
+        Assert.Throws<Microsoft.Extensions.Options.OptionsValidationException>(act);
     }
 
     [Theory]

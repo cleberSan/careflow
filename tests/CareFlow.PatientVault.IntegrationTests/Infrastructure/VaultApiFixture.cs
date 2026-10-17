@@ -38,6 +38,8 @@ public sealed class VaultApiFixture : IAsyncLifetime
     public string ApplicationConnectionString =>
         _login?.ConnectionString ?? throw new InvalidOperationException("Fixture não inicializada.");
 
+    public PostgresTestServer Postgres => _postgres ?? throw new InvalidOperationException("Fixture não inicializada.");
+
     public string AdminConnectionString =>
         _postgres?.AdminConnectionString ?? throw new InvalidOperationException("Fixture não inicializada.");
 

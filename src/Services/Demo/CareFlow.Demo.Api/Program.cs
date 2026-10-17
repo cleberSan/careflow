@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
+using CareFlow.BuildingBlocks.AspNetCore.Hosting;
 using CareFlow.BuildingBlocks.AspNetCore.Observability;
 using CareFlow.Demo.Api.Common;
 using CareFlow.Demo.Api.Features;
@@ -11,16 +12,30 @@ using CareFlow.Demo.Api.Telemetry;
 
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 
+// Healthcheck do container (ADR-0013): sai antes de montar o host.
+if (HealthProbe.IsRequested(args))
+{
+    return await HealthProbe.RunAsync(args).ConfigureAwait(false);
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
-// O Demo existe para o Painel e usa um emissor de tokens local: não sobe em produção (ADR-0010).
+// O Demo existe para o Painel e usa um emissor de tokens próprio: roda no desenvolvimento, nos testes e na
+// demonstração hospedada (ambiente Demo, ADR-0013), nunca num ambiente de produção com dados reais.
 if (builder.Environment.IsProduction())
 {
-    throw new InvalidOperationException("O serviço Demo não roda em produção: hospedar o Painel ao vivo é decisão da fase 9.");
+    throw new InvalidOperationException("O serviço Demo não roda em produção; a demonstração hospedada usa o ambiente Demo.");
+}
+
+// Interruptor (ADR-0013): um arquivo fora da imagem, relido a cada mudança, liga e desliga o Demo sem deploy.
+if (builder.Configuration["Demo:SwitchFile"] is { Length: > 0 } switchFile)
+{
+    builder.Configuration.AddJsonFile(switchFile, optional: true, reloadOnChange: true);
 }
 
 builder.WebHost.ConfigureKestrel(kestrel =>
@@ -44,6 +59,7 @@ builder.Services.AddOptions<DemoOptions>()
                    && o.Services.Rights is not null, "Demo:Services precisa dos sete endereços.")
     .Validate(o => o.FirstSlot + o.Slots - 1 <= 64, "Demo:FirstSlot + Demo:Slots passa da partição 64.")
     .ValidateOnStart();
+builder.Services.AddOptions<DemoSwitchOptions>().BindConfiguration(DemoSwitchOptions.SectionName);
 builder.Services.AddOptions<DemoTokenOptions>()
     .BindConfiguration(DemoTokenOptions.SectionName)
     .ValidateDataAnnotations()
@@ -54,11 +70,37 @@ builder.Services.TryAddSingleton<IServiceAuthenticator>(provider => provider.Get
 builder.Services.AddTransient<ServiceAuthenticationHandler>();
 builder.Services.AddSingleton<CareFlowServices>();
 builder.Services.AddSingleton<DemoSessions>();
+builder.Services.AddSingleton<IClinicLedger>(provider =>
+    provider.GetRequiredService<IOptions<DemoOptions>>().Value.LedgerPath is { Length: > 0 } ledgerPath
+        ? new FileClinicLedger(ledgerPath)
+        : new InMemoryClinicLedger());
 builder.Services.AddSingleton<SessionLifecycle>();
 builder.Services.AddHostedService<SessionCleaner>();
 
 // Endereços lidos uma vez na subida (a validação acima recusa a subida sem eles).
 var demo = builder.Configuration.GetSection(DemoOptions.SectionName).Get<DemoOptions>() ?? new DemoOptions();
+
+// CORS só para as origens do site, sem credenciais: a sessão vai no cabeçalho Authorization, não em cookie.
+builder.Services.AddCors(cors => cors.AddPolicy(DemoHttp.CorsPolicy, policy => policy
+    .WithOrigins([.. demo.AllowedOrigins])
+    .WithMethods("GET", "POST", "PUT", "DELETE")
+    .WithHeaders("Authorization", "Content-Type", DemoHttp.CsrfHeader)
+    .WithExposedHeaders("Retry-After")
+    .SetPreflightMaxAge(TimeSpan.FromMinutes(10))));
+
+// Atrás do proxy, o endereço do visitante vem do X-Forwarded-For, mas só de quem está nas redes do proxy e só um
+// salto: um X-Forwarded-For forjado pelo navegador não muda a partição dos limites.
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
+{
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    forwarded.ForwardLimit = 1;
+    forwarded.KnownProxies.Clear();
+    forwarded.KnownIPNetworks.Clear();
+    foreach (var network in demo.Proxy.KnownNetworks)
+    {
+        forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+    }
+});
 foreach (var service in CareFlowService.All)
 {
     var address = service.Name switch
@@ -102,6 +144,25 @@ builder.Services.AddRateLimiter(limiter =>
         return ValueTask.CompletedTask;
     };
 
+    // Teto por endereço de origem em todas as rotas do Painel, somando as sessões dele: um script com várias
+    // sessões não passa do teto do endereço. A rota de saúde fica de fora (só a rede interna chega nela).
+    limiter.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        if (!context.Request.Path.StartsWithSegments("/demo", StringComparison.Ordinal))
+        {
+            return RateLimitPartition.GetNoLimiter("interno");
+        }
+
+        var limits = context.RequestServices.GetRequiredService<IOptions<DemoOptions>>().Value.RateLimits;
+        return RateLimitPartition.GetTokenBucketLimiter(DemoHttp.ClientPartition(context), _ => new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = limits.RequestsPerMinutePerAddress,
+            TokensPerPeriod = limits.RequestsPerMinutePerAddress,
+            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
     // Sessões novas por endereço de origem: quem abre muitas sessões esgota o pool dos outros visitantes.
     limiter.AddPolicy(DemoHttp.SessionCreationPolicy, context =>
     {
@@ -114,7 +175,7 @@ builder.Services.AddRateLimiter(limiter =>
         });
     });
 
-    // Ações por sessão: balde de fichas, para cliques normais passarem e scripts não.
+    // Ações por sessão (cada sessão é uma clínica): balde de fichas, para cliques normais passarem e scripts não.
     limiter.AddPolicy(DemoHttp.SessionPolicy, context =>
     {
         var limits = context.RequestServices.GetRequiredService<IOptions<DemoOptions>>().Value.RateLimits;
@@ -131,6 +192,11 @@ builder.Services.AddRateLimiter(limiter =>
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+if (demo.Proxy.KnownNetworks.Count > 0)
+{
+    app.UseForwardedHeaders();
+}
 
 // Falha de um serviço vira 502 sem detalhes: endereços e mensagens internas não chegam ao navegador.
 app.UseExceptionHandler(errors => errors.Run(async context =>
@@ -153,12 +219,14 @@ app.Use(async (context, next) =>
     await next(context).ConfigureAwait(false);
 });
 
+app.UseCors(DemoHttp.CorsPolicy);
 app.UseRateLimiter();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapDemoEndpoints();
 
 await app.RunAsync().ConfigureAwait(false);
+return 0;
 
 /// <summary>Ponto de entrada; público para os testes com WebApplicationFactory.</summary>
 public partial class Program;

@@ -1,7 +1,7 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "include": "[CareFlow.BuildingBlocks]*",
+      "include": "[CareFlow.BuildingBlocks]*,[CareFlow.BuildingBlocks.AspNetCore]CareFlow.BuildingBlocks.AspNetCore.Hosting.*",
       "excludeByAttribute": "GeneratedCode,GeneratedCodeAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,CompilerGeneratedAttribute",
       "excludeByFile": "**/Migrations/*.cs",
       "excludeAssembliesWithoutSources": "MissingAll"

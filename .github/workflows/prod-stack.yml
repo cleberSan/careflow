@@ -1,0 +1,121 @@
+name: Stack de produção
+
+# Sobe a stack da VM da Oracle num runner, com o mesmo compose, Caddyfile, scripts e init do Postgres (ADR-0013),
+# e confere o que a VM confere: deploy com saúde, teste de fumaça pela 443, interruptor, backup e ensaio de
+# restauração. Diferenças, todas em deploy/prod/compose.ci.yaml: imagens x64 compiladas aqui, chave mestra local
+# no lugar do OCI Vault e certificado de uma CA local do Caddy.
+on:
+  pull_request:
+    paths: ["deploy/**", "src/**", "tests/CareFlow.SmokeTests/**", "Directory.*.props", ".github/workflows/prod-stack.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/clebersan/careflow
+  COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  stack:
+    name: Stack de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.COMMIT }}
+          persist-credentials: false
+
+      - name: Compilar as oito imagens (x64)
+        run: |
+          for pair in patient-vault:PatientVault consent:Consent scheduling:Scheduling notifications:Notifications \
+                      audit:Audit triage:Triage rights:Rights demo:Demo; do
+            docker build --quiet \
+              --build-arg SERVICE="${pair#*:}" --build-arg REVISION="$COMMIT" \
+              -t "$IMAGE:${pair%%:*}-$COMMIT" -f deploy/docker/Dockerfile .
+          done
+
+      - name: Preparar a "VM" (scripts, configuração e segredos gerados aqui)
+        run: |
+          sudo install -o root -g root -m 0755 deploy/prod/bin/careflow-* /usr/local/sbin/
+          sudo install -d -m 0755 /etc/careflow/demo /opt/careflow/releases
+          printf '%s\n' "CAREFLOW_DOMAIN=demo.careflow.test" "CAREFLOW_SITE_ORIGIN=https://site.careflow.test" \
+            "CAREFLOW_ACME_EMAIL=ci@careflow.invalid" "CAREFLOW_IMAGE=$IMAGE" | sudo tee /etc/careflow/release.env > /dev/null
+          echo '{ "Demo": { "Switch": { "Enabled": true } } }' | sudo tee /etc/careflow/demo/demo-switch.json > /dev/null
+          sudo careflow-generate-secrets --vault-endpoint https://ci-crypto.kms.sa-saopaulo-1.oraclecloud.com --key-id ocid1.key.oc1.ci
+          echo "KeyManagement__Local__Keys__ci=$(openssl rand -base64 32)" | sudo tee /etc/careflow/env/ci-keys.env > /dev/null
+          sudo chmod 0600 /etc/careflow/env/ci-keys.env
+          # Rodar de novo não pode trocar nenhum segredo.
+          # O diretório é do root (0700): o glob precisa ser expandido pelo shell do sudo, não pelo do runner.
+          before="$(sudo bash -c 'sha256sum /etc/careflow/env/*.env')"
+          sudo careflow-generate-secrets --vault-endpoint https://ci-crypto.kms.sa-saopaulo-1.oraclecloud.com --key-id ocid1.key.oc1.ci
+          [[ "$before" == "$(sudo bash -c 'sha256sum /etc/careflow/env/*.env')" ]]
+
+      - name: Deploy pelo careflow-deploy (migrations, saúde e registro da versão)
+        run: |
+          sudo CAREFLOW_COMPOSE_OVERRIDE=compose.ci.yaml CAREFLOW_SKIP_PULL=1 CAREFLOW_HEALTH_INSECURE=1 \
+            careflow-deploy deploy "$COMMIT"
+          sudo CAREFLOW_COMPOSE_OVERRIDE=compose.ci.yaml careflow-deploy status
+
+      - name: Commit inexistente é recusado sem mexer no que está no ar
+        run: |
+          if sudo careflow-deploy deploy 0000000000000000000000000000000000000000; then exit 1; fi
+          [[ "$(basename "$(readlink -f /opt/careflow/current)")" == "$COMMIT" ]]
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Teste de fumaça pela 443
+        run: |
+          sudo docker cp careflow-caddy-1:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/caddy-root.crt"
+          sudo chmod 0644 "$RUNNER_TEMP/caddy-root.crt"
+          CAREFLOW_SMOKE_URL=https://demo.careflow.test CAREFLOW_SMOKE_ORIGIN=https://site.careflow.test \
+          CAREFLOW_SMOKE_CONNECT=127.0.0.1:443 CAREFLOW_SMOKE_CA="$RUNNER_TEMP/caddy-root.crt" \
+            dotnet test --project tests/CareFlow.SmokeTests -c Release
+
+      - name: Interruptor sem redeploy
+        run: |
+          status() { curl -fsS -k --resolve demo.careflow.test:443:127.0.0.1 -H 'X-CareFlow-Demo: 1' https://demo.careflow.test/demo/v1/status; }
+          wait_for() { for _ in $(seq 1 20); do [[ "$(status)" == *"$1"* ]] && return 0; sleep 2; done; status; return 1; }
+          sudo careflow-deploy demo off
+          wait_for '"state":"desligado"'
+          code="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve demo.careflow.test:443:127.0.0.1 -X POST \
+            -H 'X-CareFlow-Demo: 1' https://demo.careflow.test/demo/v1/sessions)"
+          [[ "$code" == 503 ]]
+          sudo careflow-deploy demo on
+          wait_for '"available":true'
+
+      - name: Backup, ensaio e restauração com reaplicação da eliminação
+        env:
+          REHEARSAL_STATE: ${{ runner.temp }}/rehearsal.env
+        run: |
+          # Um paciente numa clínica fora do Painel, com chave no cofre; o backup sai com ela.
+          sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh seed
+          sudo CAREFLOW_BACKUP_DIR="$RUNNER_TEMP/backups" careflow-backup --local
+          backup="$(sudo bash -c 'ls -d "$1"/backups/* | tail -n1' _ "$RUNNER_TEMP")"
+          sudo careflow-restore-drill "$backup"
+          # A eliminação acontece depois do backup: restaurar traz a chave de volta e o script precisa reaplicá-la.
+          sudo REHEARSAL_STATE="$REHEARSAL_STATE" deploy/prod/ci/restore-rehearsal.sh erase
+          sudo CAREFLOW_COMPOSE_OVERRIDE=compose.ci.yaml CAREFLOW_SKIP_PULL=1 CAREFLOW_HEALTH_INSECURE=1 \
+            careflow-restore "$backup" --confirm | tee "$RUNNER_TEMP/restore.log"
+          grep -q 'chaves de pacientes já eliminados que voltaram com o backup: 1' "$RUNNER_TEMP/restore.log"
+          grep -q '1 eliminações reaplicadas' "$RUNNER_TEMP/restore.log"
+          grep -q 'cadeia da auditoria íntegra em 1 clínicas' "$RUNNER_TEMP/restore.log"
+
+      - name: Fumaça de novo depois da restauração
+        run: |
+          CAREFLOW_SMOKE_URL=https://demo.careflow.test CAREFLOW_SMOKE_ORIGIN=https://site.careflow.test \
+          CAREFLOW_SMOKE_CONNECT=127.0.0.1:443 CAREFLOW_SMOKE_CA="$RUNNER_TEMP/caddy-root.crt" \
+            dotnet test --project tests/CareFlow.SmokeTests -c Release
+
+      - name: Logs dos containers (só na falha)
+        if: failure()
+        run: sudo docker ps -a --format '{{.Names}}' | grep '^careflow-' | xargs -r -n1 sudo docker logs --tail 60

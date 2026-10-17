@@ -549,6 +549,24 @@
         "resolved": "5.0.0",
         "contentHash": "dDoKi0PnDz31yAyETfRntsLArTlVAVzUzCIvvEDsDsucrl33Dl8pIJG06ePTJTI3tGpeyHS9Cq7Foc/s4EeKcg=="
       },
+      "NLog": {
+        "type": "Transitive",
+        "resolved": "4.7.2",
+        "contentHash": "tfZNTOYr0TwvJNrXsJsVdZPSgIpYN1rXHnAZAadeaIbz+v18agNCCxgZXnXQqNKNizkogJ68zYTNKavyQFWwrg=="
+      },
+      "OCI.DotNetSDK.Common": {
+        "type": "Transitive",
+        "resolved": "147.1.0",
+        "contentHash": "m4o0On3IC/hjeGnWVa/7r2+xBZmbgvdH+CmRWP8KW0CjL4+BqV9OnXVfE1aOoxuUKovEELew7w5KM8UXGWsMyA==",
+        "dependencies": {
+          "NLog": "4.7.2",
+          "Newtonsoft.Json": "12.0.3",
+          "Polly": "7.2.0",
+          "Portable.BouncyCastle": "1.9.0",
+          "System.ComponentModel.Annotations": "4.7.0",
+          "System.IdentityModel.Tokens.Jwt": "6.35.0"
+        }
+      },
       "OpenTelemetry": {
         "type": "Transitive",
         "resolved": "1.19.1",
@@ -574,6 +592,16 @@
           "OpenTelemetry.Api": "1.19.1"
         }
       },
+      "Polly": {
+        "type": "Transitive",
+        "resolved": "7.2.0",
+        "contentHash": "fbtSRyqVSd5AS7O4Pm2Mnw7zKKJk7Z3rOfNnKSTfPkTxM8Z1JJFZzzjqLAOTG6AyUkormSWMO2AhdlygF/384Q=="
+      },
+      "Portable.BouncyCastle": {
+        "type": "Transitive",
+        "resolved": "1.9.0",
+        "contentHash": "eZZBCABzVOek+id9Xy04HhmgykF0wZg9wpByzrWN7q8qEI0Qen9b7tfd7w8VA3dOeesumMG7C5ZPy0jk7PSRHw=="
+      },
       "SharpZipLib": {
         "type": "Transitive",
         "resolved": "1.4.2",
@@ -587,6 +615,11 @@
           "BouncyCastle.Cryptography": "2.7.0",
           "Microsoft.Extensions.Logging.Abstractions": "8.0.3"
         }
+      },
+      "System.ComponentModel.Annotations": {
+        "type": "Transitive",
+        "resolved": "4.7.0",
+        "contentHash": "0YFqjhp/mYkDGpU0Ye1GjE53HMp9UVfGN7seGpAMttAC0C40v5gw598jCgpbBLMmCo0E5YRLBv5Z2doypO49ZQ=="
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
@@ -733,7 +766,8 @@
           "CareFlow.BuildingBlocks.Persistence": "[1.0.0, )",
           "CareFlow.PatientVault.Domain": "[1.0.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
-          "Microsoft.AspNetCore.OpenApi": "[10.0.13, )"
+          "Microsoft.AspNetCore.OpenApi": "[10.0.13, )",
+          "OCI.DotNetSDK.Keymanagement": "[147.1.0, )"
         }
       },
       "careflow.patientvault.domain": {
@@ -790,6 +824,12 @@
           "Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions": "10.0.13"
         }
       },
+      "Newtonsoft.Json": {
+        "type": "CentralTransitive",
+        "requested": "[13.0.4, )",
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
       "Npgsql": {
         "type": "CentralTransitive",
         "requested": "[10.0.3, )",
@@ -818,6 +858,15 @@
         "dependencies": {
           "Npgsql": "10.0.3",
           "OpenTelemetry.API": "1.15.3"
+        }
+      },
+      "OCI.DotNetSDK.Keymanagement": {
+        "type": "CentralTransitive",
+        "requested": "[147.1.0, )",
+        "resolved": "147.1.0",
+        "contentHash": "RJPSQeFg+jsdV1bGoS1YyFwGSJkGXyJlKI+n+d3Ncig8EQSNFNVR4/Nx33jCMV1XZcQjJRt9jI7W/aWBTOXldw==",
+        "dependencies": {
+          "OCI.DotNetSDK.Common": "147.1.0"
         }
       },
       "OpenTelemetry.Exporter.OpenTelemetryProtocol": {

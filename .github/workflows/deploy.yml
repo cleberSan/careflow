@@ -1,0 +1,114 @@
+name: Deploy da demonstração
+
+# Publica um commit da main na VM da Oracle (ADR-0013). Só roda à mão e só depois da aprovação no environment
+# "production". A chave de deploy só consegue pedir "deploy <commit>", "rollback", "status" ou "demo on|off":
+# o código que a VM roda vem do repositório público nesse commit, e as imagens do GHCR com a mesma tag.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit da main (SHA completo). Vazio: o último da main."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/clebersan/careflow
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  deploy:
+    name: Deploy, fumaça e rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://${{ vars.CAREFLOW_DEMO_HOST }}/demo/v1/status
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Escolher o commit
+        id: target
+        env:
+          REQUESTED: ${{ inputs.commit }}
+        run: |
+          commit="${REQUESTED:-$(git rev-parse HEAD)}"
+          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Informe o SHA completo (40 caracteres)."; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$commit" HEAD; then
+            echo "::error::O commit $commit não está na main."; exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Conferir as oito imagens no GHCR
+        env:
+          COMMIT: ${{ steps.target.outputs.commit }}
+        run: |
+          for service in patient-vault consent scheduling notifications audit triage rights demo; do
+            docker manifest inspect "$IMAGE:$service-$COMMIT" > /dev/null \
+              || { echo "::error::Falta $IMAGE:$service-$COMMIT. Espere o workflow Imagens desse commit terminar."; exit 1; }
+          done
+
+      - name: Preparar SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.CAREFLOW_DEMO_HOST }}
+        run: |
+          if [[ -z "$DEPLOY_SSH_KEY" || -z "$KNOWN_HOSTS" ]]; then
+            echo "::error::Configure o secret DEPLOY_SSH_KEY e a variável DEPLOY_KNOWN_HOSTS no environment production."; exit 1
+          fi
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 0600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<CONFIG
+          Host careflow
+            HostName $HOST
+            User deploy
+            IdentityFile ~/.ssh/deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          CONFIG
+
+      - name: Deploy na VM (volta sozinho se não ficar saudável)
+        run: ssh careflow "deploy ${{ steps.target.outputs.commit }}"
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Teste de fumaça contra a URL pública
+        id: smoke
+        env:
+          CAREFLOW_SMOKE_URL: https://${{ vars.CAREFLOW_DEMO_HOST }}
+          CAREFLOW_SMOKE_ORIGIN: ${{ vars.CAREFLOW_SITE_ORIGIN }}
+          CAREFLOW_SMOKE_CHECK_PORT_80: "true"
+        run: dotnet test --project tests/CareFlow.SmokeTests -c Release
+
+      - name: Rollback se a fumaça falhar
+        if: failure() && steps.smoke.outcome == 'failure'
+        run: |
+          ssh careflow rollback
+          echo "::error::O teste de fumaça falhou; a VM voltou para a versão anterior."
+
+      - name: Estado final
+        if: always() && steps.target.outcome == 'success'
+        run: ssh careflow status || true
+
+      - name: Apagar a chave do runner
+        if: always()
+        run: rm -f ~/.ssh/deploy

@@ -1,0 +1,9 @@
+[Unit]
+Description=Ensaio semanal de restauração do backup do CareFlow
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/careflow-restore-drill
+Nice=10

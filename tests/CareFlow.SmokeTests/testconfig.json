@@ -1,0 +1,8 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[CareFlow.SmokeTests.Target]*",
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}

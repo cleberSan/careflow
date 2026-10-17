@@ -15,12 +15,13 @@ namespace CareFlow.PatientVault.UnitTests.Security;
 
 public sealed class InternalServiceAuthenticationTests
 {
-    private static IConfiguration Config(string? publicKey, string? issuer = null) =>
+    private static IConfiguration Config(string? publicKey, string? issuer = null, string? additional = null) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["InternalAuth:PublicKey"] = publicKey,
                 ["InternalAuth:Issuer"] = issuer,
+                ["InternalAuth:AdditionalPublicKeys:0"] = additional,
             })
             .Build();
 
@@ -46,7 +47,7 @@ public sealed class InternalServiceAuthenticationTests
 
         // Assert
         var parameters = options.TokenValidationParameters;
-        Assert.IsType<ECDsaSecurityKey>(parameters.IssuerSigningKey);
+        Assert.IsType<ECDsaSecurityKey>(Assert.Single(parameters.IssuerSigningKeys));
         Assert.Equal(("emissor-dev", "careflow-patient-vault"), (parameters.ValidIssuer, parameters.ValidAudience));
         Assert.Equal([SecurityAlgorithms.EcdsaSha256], parameters.ValidAlgorithms);
         Assert.True(parameters.RequireExpirationTime && parameters.ValidateLifetime && parameters.RequireSignedTokens);
@@ -61,7 +62,30 @@ public sealed class InternalServiceAuthenticationTests
 
         // Assert
         Assert.Null(options.TokenValidationParameters.IssuerSigningKey);
+        Assert.Empty(options.TokenValidationParameters.IssuerSigningKeys);
         Assert.Equal(InternalServiceAuthentication.DefaultIssuer, options.TokenValidationParameters.ValidIssuer);
+    }
+
+    [Fact]
+    public void OneKeyPerCallingService_AreAllTrusted()
+    {
+        // Act: Notifications e Triage, cada um com o próprio par (ADR-0013).
+        var options = Register(
+            Config(NewPublicKey(ECCurve.NamedCurves.nistP256), additional: NewPublicKey(ECCurve.NamedCurves.nistP256)),
+            "Demo");
+
+        // Assert
+        Assert.Equal(2, options.TokenValidationParameters.IssuerSigningKeys.Count());
+    }
+
+    [Fact]
+    public void AdditionalKeyAlone_InProduction_IsRefused()
+    {
+        // Act
+        var act = () => Register(Config(publicKey: null, additional: NewPublicKey(ECCurve.NamedCurves.nistP256)), Environments.Production);
+
+        // Assert
+        Assert.Throws<InvalidOperationException>(act);
     }
 
     [Fact]

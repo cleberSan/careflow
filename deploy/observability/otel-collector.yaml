@@ -1,5 +1,6 @@
 # OpenTelemetry Collector local: recebe OTLP dos serviços, aplica a segunda barreira de dados pessoais
-# e distribui para Tempo (traces), Loki (logs) e Prometheus (métricas). Só desenvolvimento (ADR-0010).
+# e distribui para Tempo (traces), Loki (logs) e Prometheus (métricas). Usado no desenvolvimento (ADR-0010) e na
+# demonstração hospedada, onde tudo fica na própria VM (ADR-0013).
 receivers:
   otlp:
     protocols:

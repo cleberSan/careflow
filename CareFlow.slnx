@@ -46,6 +46,7 @@
     <Project Path="tests/CareFlow.BuildingBlocks.Tests/CareFlow.BuildingBlocks.Tests.csproj" />
     <Project Path="tests/CareFlow.Consent.IntegrationTests/CareFlow.Consent.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Consent.UnitTests/CareFlow.Consent.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.Demo.IntegrationTests/CareFlow.Demo.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Demo.UnitTests/CareFlow.Demo.UnitTests.csproj" />
     <Project Path="tests/CareFlow.EndToEndTests/CareFlow.EndToEndTests.csproj" />
     <Project Path="tests/CareFlow.Notifications.IntegrationTests/CareFlow.Notifications.IntegrationTests.csproj" />
@@ -56,6 +57,8 @@
     <Project Path="tests/CareFlow.Rights.UnitTests/CareFlow.Rights.UnitTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.IntegrationTests/CareFlow.Scheduling.IntegrationTests.csproj" />
     <Project Path="tests/CareFlow.Scheduling.UnitTests/CareFlow.Scheduling.UnitTests.csproj" />
+    <Project Path="tests/CareFlow.SmokeTests/CareFlow.SmokeTests.csproj" />
+    <Project Path="tests/CareFlow.SmokeTests.Target/CareFlow.SmokeTests.Target.csproj" />
     <Project Path="tests/CareFlow.Testing/CareFlow.Testing.csproj" />
     <Project Path="tests/CareFlow.Triage.Evaluation/CareFlow.Triage.Evaluation.csproj" />
     <Project Path="tests/CareFlow.Triage.IntegrationTests/CareFlow.Triage.IntegrationTests.csproj" />

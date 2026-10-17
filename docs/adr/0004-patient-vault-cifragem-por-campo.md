@@ -3,6 +3,8 @@
 - Status: aceito
 - Data: 2026-10-14
 
+> Atualização (fase 9): o provedor de nuvem é o OCI Vault (chave AES protegida por software, autenticação por instance principal). O provedor local passou a ser recusado também no ambiente `Demo`, exposto à internet. Ver [ADR-0013](0013-demonstracao-hospedada-na-oracle.md).
+
 ## Contexto
 
 Os outros serviços do CareFlow (agenda, triagem, notificações) não precisam saber quem é o paciente, só precisam de uma referência estável a ele. Dados pessoais concentrados num único serviço reduzem a superfície de vazamento (minimização, LGPD art. 6º, III). Dentro desse serviço, o dado precisa continuar ilegível para quem tiver acesso ao banco ou a um backup, e a exclusão futura por clínica deve poder ser feita apagando uma chave (crypto-shredding).
