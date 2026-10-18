@@ -185,4 +185,6 @@ Os segredos da stack não têm cópia fora da VM. Numa VM nova: passos 5, 8 (OCI
 
 ## Custos
 
-Tudo acima cabe no Always Free: uma VM A1 dentro de 4 OCPU e 24 GB, até 200 GB de disco, chaves de software no Vault e até 20 GB no Object Storage (os backups têm poucos MB). A Oracle pode recuperar instâncias Always Free ociosas por muito tempo; o uso do Painel e os timers costumam evitar isso, mas não há garantia.
+Para continuar sem custo, não mude a conta para **Pay As You Go** (o botão "Upgrade"). Numa conta Free Tier, a Oracle não deixa criar recurso pago depois dos 30 dias de teste, então o pior caso é perder a VM, não receber cobrança.
+
+Tudo acima cabe no Always Free: uma VM A1 dentro da cota de 2 OCPU e 12 GB (a Oracle cortou de 4 OCPU e 24 GB em junho de 2026), até 200 GB de disco, chaves de software no Vault e até 20 GB no Object Storage (os backups têm poucos MB). A Oracle pode recuperar instâncias Always Free ociosas por muito tempo; o uso do Painel e os timers costumam evitar isso, mas não há garantia.
