@@ -37,7 +37,7 @@ O script [`deploy/oracle/provision.sh`](../../deploy/oracle/provision.sh) faz os
 
 Ele só cria recursos Always Free, com tamanhos fixos. Antes de criar a VM, para se a conta já tiver outra instância ou outro disco.
 
-Se a Oracle responder "sem capacidade", rode o mesmo comando mais tarde: o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
+A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de disponibilidade só. Por isso o script tenta de novo a cada minuto, por 15 minutos. Se mesmo assim não conseguir, rode o mesmo comando mais tarde: de madrugada costuma ter mais vaga, e o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
 
 Com o atalho, pule para o passo 9. O passo 10 pode ser feito do próprio Cloud Shell, com `ssh -i ~/.ssh/careflow-oracle ubuntu@<IP>`. A chave de deploy do passo 10 também pode ser gerada lá, mas em RSA, porque o Cloud Shell roda em modo FIPS e recusa ed25519: `ssh-keygen -t rsa -b 4096 -f ~/careflow-deploy -N "" -C "github-deploy"`.
 

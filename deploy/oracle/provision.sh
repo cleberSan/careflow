@@ -24,6 +24,9 @@ VCN_CIDR="10.0.0.0/16"
 SUBNET_CIDR="10.0.0.0/24"
 SSH_KEY="$HOME/.ssh/careflow-oracle"
 SUMMARY="$HOME/careflow-oracle.env"
+# Por quanto tempo insistir quando a Oracle está sem vaga para a A1 gratuita.
+RETRY_MINUTES="${CAREFLOW_RETRY_MINUTES:-15}"
+[[ "$RETRY_MINUTES" =~ ^[0-9]+$ ]] || { echo "CAREFLOW_RETRY_MINUTES precisa ser um número de minutos." >&2; exit 1; }
 
 log() { printf '\n== %s\n' "$*"; }
 die() { printf '\nERRO: %s\n' "$*" >&2; exit 1; }
@@ -130,7 +133,7 @@ if [[ -z "$INSTANCE" || "$INSTANCE" == null ]]; then
 
   IMAGE="$(o compute image list --compartment-id "$COMPARTMENT" --operating-system "Canonical Ubuntu" \
     --operating-system-version "24.04" --shape "$SHAPE" --sort-by TIMECREATED --sort-order DESC --limit 1 \
-    --query 'data[0].id' --raw-output)"
+    --query 'data[0].id' --raw-output 2> /dev/null)"
   [[ "$IMAGE" == ocid1.image.* ]] || die "não achei a imagem Ubuntu 24.04 para ARM."
 
   cloud_init="$(mktemp)"
@@ -138,29 +141,38 @@ if [[ -z "$INSTANCE" || "$INSTANCE" == null ]]; then
   curl -fsSL "$RAW/deploy/oracle/cloud-init.yaml" -o "$cloud_init"
   head -n1 "$cloud_init" | grep -q '^#cloud-config' || die "o cloud-init baixado não parece válido."
 
-  # "Out of host capacity" é comum na A1 gratuita: tenta cada domínio de disponibilidade.
+  # "Out of host capacity" é comum na A1 gratuita, ainda mais em região com um domínio só, como São Paulo: tenta
+  # cada domínio e repete a cada minuto até o prazo. O Cloud Shell fecha depois de uns 20 minutos sem uso.
   mapfile -t ads < <(o iam availability-domain list --compartment-id "$TENANCY" --query 'data[].name' --output json | jq -r '.[]')
-  for ad in "${ads[@]}"; do
-    echo "Tentando $ad..."
-    if out="$(o compute instance launch --compartment-id "$COMPARTMENT" --availability-domain "$ad" \
-      --display-name "$NAME" --hostname-label "$NAME" --shape "$SHAPE" \
-      --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEMORY_GB}" \
-      --image-id "$IMAGE" --boot-volume-size-in-gbs "$BOOT_GB" \
-      --subnet-id "$SUBNET" --assign-public-ip true \
-      --ssh-authorized-keys-file "$SSH_KEY.pub" --user-data-file "$cloud_init" \
-      --wait-for-state RUNNING --max-wait-seconds 1200 --query 'data.id' --raw-output 2>&1)"; then
-      INSTANCE="$(tail -n1 <<< "$out")"
-      break
+  deadline=$((SECONDS + RETRY_MINUTES * 60))
+  attempt=0
+  while [[ "$INSTANCE" != ocid1.instance.* ]]; do
+    attempt=$((attempt + 1))
+    for ad in "${ads[@]}"; do
+      echo "$(date +%H:%M) tentativa $attempt em $ad..."
+      if out="$(o compute instance launch --compartment-id "$COMPARTMENT" --availability-domain "$ad" \
+        --display-name "$NAME" --hostname-label "$NAME" --shape "$SHAPE" \
+        --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEMORY_GB}" \
+        --image-id "$IMAGE" --boot-volume-size-in-gbs "$BOOT_GB" \
+        --subnet-id "$SUBNET" --assign-public-ip true \
+        --ssh-authorized-keys-file "$SSH_KEY.pub" --user-data-file "$cloud_init" \
+        --wait-for-state RUNNING --max-wait-seconds 1200 --query 'data.id' --raw-output 2>&1)"; then
+        INSTANCE="$(tail -n1 <<< "$out")"
+        break
+      fi
+      if grep -qiE 'capacity|TooManyRequests' <<< "$out"; then
+        echo "  sem vaga agora."
+        continue
+      fi
+      printf '%s\n' "$out" >&2
+      die "a Oracle recusou a criação da VM (mensagem acima)."
+    done
+    [[ "$INSTANCE" != ocid1.instance.* ]] || break
+    if ((SECONDS + 60 > deadline)); then
+      die "a Oracle ficou sem vaga gratuita de A1 durante $RETRY_MINUTES minutos. Rode o mesmo comando de novo mais tarde (de madrugada costuma ter mais vaga); o que já foi criado é reaproveitado."
     fi
-    if grep -qi 'capacity' <<< "$out"; then
-      echo "Sem capacidade em $ad agora."
-      continue
-    fi
-    printf '%s\n' "$out" >&2
-    die "a Oracle recusou a criação da VM (mensagem acima)."
+    sleep 60
   done
-  [[ "$INSTANCE" == ocid1.instance.* ]] ||
-    die "a Oracle está sem capacidade gratuita de A1 em todos os domínios agora. Rode o mesmo comando de novo mais tarde; o que já foi criado é reaproveitado."
 fi
 PUBLIC_IP="$(o compute instance list-vnics --instance-id "$INSTANCE" --query 'data[0]."public-ip"' --raw-output)"
 echo "$INSTANCE"
