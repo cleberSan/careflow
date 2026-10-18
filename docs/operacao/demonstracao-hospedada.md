@@ -37,7 +37,18 @@ O script [`deploy/oracle/provision.sh`](../../deploy/oracle/provision.sh) faz os
 
 Ele só cria recursos Always Free, com tamanhos fixos. Antes de criar a VM, para se a conta já tiver outra instância ou outro disco.
 
-A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de disponibilidade só. Por isso o script tenta primeiro 2 OCPU e 12 GB e, sem vaga, 1 OCPU e 6 GB, que costuma ter vaga mais fácil; e repete a cada minuto, por 15 minutos. A stack roda na menor, só mais devagar, e dá para crescer depois (veja [Crescer a VM](#crescer-a-vm)). Se mesmo assim não conseguir, rode o mesmo comando mais tarde: de madrugada costuma ter mais vaga, e o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
+A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de disponibilidade só. Por isso o script tenta primeiro 2 OCPU e 12 GB e, sem vaga, 1 OCPU e 6 GB, que costuma ter vaga mais fácil. A stack roda na menor, só mais devagar, e dá para crescer depois (veja [Crescer a VM](#crescer-a-vm)).
+
+Se nenhuma das duas tiver vaga, o script cria o **robô** `careflow-cacador` e termina. O robô é uma VM mínima, também do Always Free (E2.1.Micro, 1 GB, uns 50 GB de disco), que roda o [`deploy/oracle/a1-hunter.sh`](../../deploy/oracle/a1-hunter.sh):
+
+- tenta criar a VM a cada 5 minutos, nos dois tamanhos, de dia e de noite;
+- quando consegue, ou depois de 7 dias, apaga a própria VM;
+- não tem SSH nem porta aberta e não leva chave nenhuma: autentica como instance principal, com permissão só para criar e apagar VMs no compartimento `careflow`;
+- deixa a última tentativa e o resultado nas tags livres da instância dele (**Compute > Instances > careflow-cacador**).
+
+Enquanto o robô trabalha, rodar o mesmo comando de novo só mostra como ele está. Quando a VM existir, o comando apaga o robô se ele ainda estiver lá, tira a permissão dele e termina o resto. Para insistir do próprio Cloud Shell antes de chamar o robô, rode com `CAREFLOW_RETRY_MINUTES=15` na frente do `bash`.
+
+Quando a VM existe, o script mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
 
 Com o atalho, pule para o passo 9. O passo 10 pode ser feito do próprio Cloud Shell, com `ssh -i ~/.ssh/careflow-oracle ubuntu@<IP>`. A chave de deploy do passo 10 também pode ser gerada lá, mas em RSA, porque o Cloud Shell roda em modo FIPS e recusa ed25519: `ssh-keygen -t rsa -b 4096 -f ~/careflow-deploy -N "" -C "github-deploy"`.
 
@@ -222,4 +233,4 @@ Os segredos da stack não têm cópia fora da VM. Numa VM nova: passos 5, 8 (OCI
 
 Para continuar sem custo, não mude a conta para **Pay As You Go** (o botão "Upgrade"). Numa conta Free Tier, a Oracle não deixa criar recurso pago depois dos 30 dias de teste, então o pior caso é perder a VM, não receber cobrança.
 
-Tudo acima cabe no Always Free: uma VM A1 dentro da cota de 2 OCPU e 12 GB (a Oracle cortou de 4 OCPU e 24 GB em junho de 2026), até 200 GB de disco, chaves de software no Vault e até 20 GB no Object Storage (os backups têm poucos MB). A Oracle pode recuperar instâncias Always Free ociosas por muito tempo; o uso do Painel e os timers costumam evitar isso, mas não há garantia.
+Tudo acima cabe no Always Free: uma VM A1 dentro da cota de 2 OCPU e 12 GB (a Oracle cortou de 4 OCPU e 24 GB em junho de 2026), o robô numa das duas VMs E2.1.Micro gratuitas enquanto ele existir, até 200 GB de disco (a VM usa 100 e o robô uns 50), chaves de software no Vault e até 20 GB no Object Storage (os backups têm poucos MB). A Oracle pode recuperar instâncias Always Free ociosas por muito tempo; o uso do Painel e os timers costumam evitar isso, mas não há garantia.
