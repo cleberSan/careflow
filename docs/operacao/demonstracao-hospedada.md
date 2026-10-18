@@ -17,6 +17,30 @@ O que você vai ter no fim:
 2. Escolha a **região principal** com cuidado: ela não muda depois, e os recursos Always Free só existem nela. São Paulo (`sa-saopaulo-1`) ou Vinhedo (`sa-vinhedo-1`) ficam perto do público do site.
 3. Fique no plano Free Tier. Para pegar surpresa cedo, crie um orçamento em **Billing & Cost Management > Budgets** com alerta a partir de US$ 1.
 
+## Atalho: passos 2 a 8 num comando só
+
+No console da Oracle, abra o **Cloud Shell** (o ícone `>_` no topo da página). É um terminal que já está logado como você, então nenhuma senha ou chave da conta passa por ele. Rode:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/cleberSan/careflow/main/deploy/oracle/provision.sh)
+```
+
+O script [`deploy/oracle/provision.sh`](../../deploy/oracle/provision.sh) faz os passos 2 a 8 abaixo:
+
+- compartimento;
+- rede só com 22 e 443;
+- chave SSH, criada no próprio Cloud Shell;
+- VM;
+- vault, com a chave de software;
+- bucket com a regra de 7 dias;
+- permissões da VM.
+
+Ele só cria recursos Always Free, com tamanhos fixos. Antes de criar a VM, para se a conta já tiver outra instância ou outro disco.
+
+Se a Oracle responder "sem capacidade", rode o mesmo comando mais tarde: o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
+
+Com o atalho, pule para o passo 9. O passo 10 pode ser feito do próprio Cloud Shell, com `ssh -i ~/.ssh/careflow-oracle ubuntu@<IP>`. A chave de deploy do passo 10 também pode ser gerada lá.
+
 ## 2. Compartimento
 
 Em **Identity & Security > Compartments**, crie `careflow`. Tudo abaixo vai nele, para as permissões da VM ficarem restritas a ele.
