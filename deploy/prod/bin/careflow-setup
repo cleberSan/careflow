@@ -56,7 +56,17 @@ key_id="$(ask 'OCID da chave (ocid1.key...)' \
 
 echo "== Chave pública de deploy (a linha do arquivo .pub; a privada vai só para o secret do GitHub)"
 existing_key="$(sed -n 's/^restrict,command="[^"]*" //p' /home/deploy/.ssh/authorized_keys 2>/dev/null || true)"
-deploy_key="$(ask 'Chave pública ssh-ed25519' "$existing_key" '^ssh-ed25519 [A-Za-z0-9+/=]+( [^[:space:]]+)?$')"
+# ed25519 é o padrão; RSA (3072 bits ou mais) e ECDSA P-256 servem para quem gera a chave no Cloud Shell da Oracle,
+# que roda em modo FIPS e recusa ed25519.
+while true; do
+  deploy_key="$(ask 'Chave pública (ssh-ed25519, ssh-rsa ou ecdsa-sha2-nistp256)' "$existing_key" \
+    '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256) [A-Za-z0-9+/=]+( [^[:space:]]+)?$')"
+  bits="$(ssh-keygen -l -f /dev/stdin <<< "$deploy_key" 2>/dev/null | cut -d' ' -f1 || true)"
+  [[ "$bits" =~ ^[0-9]+$ ]] || { echo "  chave pública ilegível, tente de novo" >&2; existing_key=""; continue; }
+  [[ "$deploy_key" != ssh-rsa\ * || "$bits" -ge 3072 ]] && break
+  echo "  chave RSA com $bits bits; gere uma com pelo menos 3072 (ssh-keygen -t rsa -b 4096)" >&2
+  existing_key=""
+done
 install -d -o deploy -g deploy -m 0700 /home/deploy/.ssh
 printf 'restrict,command="/usr/local/sbin/careflow-deploy-ssh" %s\n' "$deploy_key" > /home/deploy/.ssh/authorized_keys
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
