@@ -91,8 +91,9 @@ runcmd:
     fi
   - netfilter-persistent save
 
-  # 2 GB de swap como folga para picos de memória (a VM tem 12 GB; os limites dos containers somam menos de 8).
-  - test -f /swapfile || (fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab)
+  # Swap como folga para picos de memória: os limites dos containers somam menos de 7 GB, então a VM de 12 GB
+  # ganha 2 GB e a de 6 GB (quando faltou vaga para a maior) ganha 4 GB.
+  - test -f /swapfile || (size=$(awk '/MemTotal/ { if ($2 < 8000000) print "4G"; else print "2G" }' /proc/meminfo) && fallocate -l "$size" /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab)
 
   # CLI da Oracle numa venv própria, versão fixa; autentica como instance principal (sem chave na VM).
   - python3 -m venv /opt/oci-cli

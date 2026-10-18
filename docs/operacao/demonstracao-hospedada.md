@@ -6,7 +6,7 @@ Guia para pôr o backend do CareFlow no ar numa VM gratuita da Oracle e operá-l
 
 O que você vai ter no fim:
 
-- uma VM Ampere A1 (arm64, 2 OCPU, 12 GB) rodando a stack com `docker compose`;
+- uma VM Ampere A1 (arm64, 2 OCPU e 12 GB, ou 1 OCPU e 6 GB quando falta vaga) rodando a stack com `docker compose`;
 - o backend em `https://<seu-subdominio>.duckdns.org`, só pela porta 443;
 - deploy por um botão no GitHub Actions, com sua aprovação, teste de fumaça e volta automática se algo falhar;
 - backup diário no Object Storage, apagado depois de 7 dias, e um ensaio de restauração todo domingo.
@@ -37,7 +37,7 @@ O script [`deploy/oracle/provision.sh`](../../deploy/oracle/provision.sh) faz os
 
 Ele só cria recursos Always Free, com tamanhos fixos. Antes de criar a VM, para se a conta já tiver outra instância ou outro disco.
 
-A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de disponibilidade só. Por isso o script tenta de novo a cada minuto, por 15 minutos. Se mesmo assim não conseguir, rode o mesmo comando mais tarde: de madrugada costuma ter mais vaga, e o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
+A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de disponibilidade só. Por isso o script tenta primeiro 2 OCPU e 12 GB e, sem vaga, 1 OCPU e 6 GB, que costuma ter vaga mais fácil; e repete a cada minuto, por 15 minutos. A stack roda na menor, só mais devagar, e dá para crescer depois (veja [Crescer a VM](#crescer-a-vm)). Se mesmo assim não conseguir, rode o mesmo comando mais tarde: de madrugada costuma ter mais vaga, e o que já existe é reaproveitado. No fim, ele mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
 
 Com o atalho, pule para o passo 9. O passo 10 pode ser feito do próprio Cloud Shell, com `ssh -i ~/.ssh/careflow-oracle ubuntu@<IP>`. A chave de deploy do passo 10 também pode ser gerada lá, mas em RSA, porque o Cloud Shell roda em modo FIPS e recusa ed25519: `ssh-keygen -t rsa -b 4096 -f ~/careflow-deploy -N "" -C "github-deploy"`.
 
@@ -73,7 +73,7 @@ Em **Compute > Instances > Create instance**, no compartimento `careflow`:
 5. **Boot volume:** 100 GB (a cota gratuita é de 200 GB no total).
 6. **Advanced options > Management > Cloud-init script:** cole o arquivo [`deploy/oracle/cloud-init.yaml`](../../deploy/oracle/cloud-init.yaml) inteiro, sem mudar nada. Ele não tem segredo.
 
-Se aparecer "Out of capacity", tente outro domínio de disponibilidade ou de novo mais tarde. É comum na shape gratuita.
+Se aparecer "Out of capacity", tente 1 OCPU e 6 GB, outro domínio de disponibilidade ou de novo mais tarde. É comum na shape gratuita.
 
 Anote o **IP público** e o **OCID da instância** (página da instância).
 
@@ -191,6 +191,17 @@ Depois, configure o site com o endereço do backend (PR do site da fase 9).
 | Backups | `systemctl list-timers 'careflow-*'` e `journalctl -u careflow-backup` |
 | Ensaio de restauração | roda todo domingo; resultado em `journalctl -u careflow-restore-drill`. À mão: `sudo careflow-restore-drill` |
 | Trocar o endpoint ou a chave do vault | `sudo careflow-setup` de novo e `sudo careflow-deploy redeploy` |
+
+## Crescer a VM
+
+Se a VM saiu com 1 OCPU e 6 GB porque faltou vaga, dá para passar para 2 OCPU e 12 GB depois, sem sair do Always Free. A VM reinicia sozinha, e o Painel ao vivo fica fora por alguns minutos (o site mostra a gravação nesse tempo). No Cloud Shell:
+
+```bash
+source ~/careflow-oracle.env
+oci compute instance update --instance-id "$INSTANCE_OCID" --shape-config '{"ocpus":2,"memoryInGBs":12}' --force
+```
+
+Se a Oracle responder "Out of host capacity", a VM continua como estava; tente de novo outro dia. O swap de 4 GB criado para a VM menor fica, sem prejuízo.
 
 ## Restaurar um backup
 
