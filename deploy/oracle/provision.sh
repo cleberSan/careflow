@@ -6,10 +6,11 @@
 #
 #   bash <(curl -fsSL https://raw.githubusercontent.com/cleberSan/careflow/main/deploy/oracle/provision.sh)
 #
-# Só cria recursos Always Free, com tamanhos fixos: 2 OCPU e 12 GB na A1, disco de 100 GB, vault padrão (não o
-# privado, que é pago), chave protegida por software e um bucket Standard. Para antes de criar a VM se a conta já
-# tiver outra instância ou outro disco, para não passar da cota gratuita. Pode rodar de novo: o que já existe é
-# reaproveitado pelo nome. Não pede nem guarda senha, token ou chave privada da conta.
+# Só cria recursos Always Free, com tamanhos fixos: 2 OCPU e 12 GB na A1 (ou 1 OCPU e 6 GB quando falta vaga para
+# a maior), disco de 100 GB, vault padrão (não o privado, que é pago), chave protegida por software e um bucket
+# Standard. Para antes de criar a VM se a conta já tiver outra instância ou outro disco, para não passar da cota
+# gratuita. Pode rodar de novo: o que já existe é reaproveitado pelo nome. Não pede nem guarda senha, token ou
+# chave privada da conta.
 set -euo pipefail
 
 REF="${CAREFLOW_REF:-main}"
@@ -17,8 +18,9 @@ RAW="https://raw.githubusercontent.com/cleberSan/careflow/$REF"
 NAME="careflow"
 BUCKET="careflow-backups"
 SHAPE="VM.Standard.A1.Flex"
-OCPUS=2
-MEMORY_GB=12
+# Tamanhos da A1 em "OCPU:GB", do preferido ao menor aceito. A menor costuma ter vaga quando a maior não tem, e a
+# stack cabe nela com o swap do cloud-init; dá para crescer depois (docs/operacao/demonstracao-hospedada.md).
+SIZES=("2:12" "1:6")
 BOOT_GB=100
 VCN_CIDR="10.0.0.0/16"
 SUBNET_CIDR="10.0.0.0/24"
@@ -116,12 +118,12 @@ if [[ ! -f "$SSH_KEY" ]]; then
 fi
 
 # --- VM ------------------------------------------------------------------------------------------------------
-log "VM $NAME ($SHAPE, $OCPUS OCPU, $MEMORY_GB GB, disco de $BOOT_GB GB)"
+log "VM $NAME ($SHAPE, 2 OCPU e 12 GB, ou 1 OCPU e 6 GB se faltar vaga; disco de $BOOT_GB GB)"
 # shellcheck disable=SC2016 # os acentos graves são literais do JMESPath, não expansão do shell
 INSTANCE="$(o compute instance list --compartment-id "$COMPARTMENT" --display-name "$NAME" --all \
   --query 'data[?"lifecycle-state"!=`TERMINATED` && "lifecycle-state"!=`TERMINATING`] | [0].id' --raw-output)"
 if [[ -z "$INSTANCE" || "$INSTANCE" == null ]]; then
-  # Cota gratuita: até 4 OCPU e 24 GB na A1 e 200 GB de disco somando tudo. Para não passar dela sem perceber,
+  # Cota gratuita: até 2 OCPU e 12 GB na A1 e 200 GB de disco somando tudo. Para não passar dela sem perceber,
   # a VM só é criada numa conta sem outras instâncias ou discos.
   others="$(o search resource structured-search \
     --query-text "query instance, bootvolume, volume resources where lifeCycleState != 'TERMINATED' && lifeCycleState != 'TERMINATING'" \
@@ -142,30 +144,34 @@ if [[ -z "$INSTANCE" || "$INSTANCE" == null ]]; then
   head -n1 "$cloud_init" | grep -q '^#cloud-config' || die "o cloud-init baixado não parece válido."
 
   # "Out of host capacity" é comum na A1 gratuita, ainda mais em região com um domínio só, como São Paulo: tenta
-  # cada domínio e repete a cada minuto até o prazo. O Cloud Shell fecha depois de uns 20 minutos sem uso.
+  # cada domínio e cada tamanho e repete a cada minuto até o prazo. O Cloud Shell fecha depois de uns 20 minutos
+  # sem uso.
   mapfile -t ads < <(o iam availability-domain list --compartment-id "$TENANCY" --query 'data[].name' --output json | jq -r '.[]')
   deadline=$((SECONDS + RETRY_MINUTES * 60))
   attempt=0
   while [[ "$INSTANCE" != ocid1.instance.* ]]; do
     attempt=$((attempt + 1))
     for ad in "${ads[@]}"; do
-      echo "$(date +%H:%M) tentativa $attempt em $ad..."
-      if out="$(o compute instance launch --compartment-id "$COMPARTMENT" --availability-domain "$ad" \
-        --display-name "$NAME" --hostname-label "$NAME" --shape "$SHAPE" \
-        --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEMORY_GB}" \
-        --image-id "$IMAGE" --boot-volume-size-in-gbs "$BOOT_GB" \
-        --subnet-id "$SUBNET" --assign-public-ip true \
-        --ssh-authorized-keys-file "$SSH_KEY.pub" --user-data-file "$cloud_init" \
-        --wait-for-state RUNNING --max-wait-seconds 1200 --query 'data.id' --raw-output 2>&1)"; then
-        INSTANCE="$(tail -n1 <<< "$out")"
-        break
-      fi
-      if grep -qiE 'capacity|TooManyRequests' <<< "$out"; then
-        echo "  sem vaga agora."
-        continue
-      fi
-      printf '%s\n' "$out" >&2
-      die "a Oracle recusou a criação da VM (mensagem acima)."
+      for size in "${SIZES[@]}"; do
+        ocpus="${size%%:*}" memory_gb="${size##*:}"
+        echo "$(date +%H:%M) tentativa $attempt em $ad com $ocpus OCPU e $memory_gb GB..."
+        if out="$(o compute instance launch --compartment-id "$COMPARTMENT" --availability-domain "$ad" \
+          --display-name "$NAME" --hostname-label "$NAME" --shape "$SHAPE" \
+          --shape-config "{\"ocpus\":$ocpus,\"memoryInGBs\":$memory_gb}" \
+          --image-id "$IMAGE" --boot-volume-size-in-gbs "$BOOT_GB" \
+          --subnet-id "$SUBNET" --assign-public-ip true \
+          --ssh-authorized-keys-file "$SSH_KEY.pub" --user-data-file "$cloud_init" \
+          --wait-for-state RUNNING --max-wait-seconds 1200 --query 'data.id' --raw-output 2>&1)"; then
+          INSTANCE="$(tail -n1 <<< "$out")"
+          break 2
+        fi
+        if grep -qiE 'capacity|TooManyRequests' <<< "$out"; then
+          echo "  sem vaga agora."
+          continue
+        fi
+        printf '%s\n' "$out" >&2
+        die "a Oracle recusou a criação da VM (mensagem acima)."
+      done
     done
     [[ "$INSTANCE" != ocid1.instance.* ]] || break
     if ((SECONDS + 60 > deadline)); then
@@ -177,6 +183,9 @@ fi
 PUBLIC_IP="$(o compute instance list-vnics --instance-id "$INSTANCE" --query 'data[0]."public-ip"' --raw-output)"
 echo "$INSTANCE"
 echo "IP público: $PUBLIC_IP"
+VM_SIZE="$(o compute instance get --instance-id "$INSTANCE" \
+  --query 'data."shape-config".[ocpus, "memory-in-gbs"]' --output json | jq -r '"\(.[0] | floor):\(.[1] | floor)"')"
+echo "Tamanho: ${VM_SIZE%%:*} OCPU e ${VM_SIZE##*:} GB"
 
 # --- Cofre e chave de software --------------------------------------------------------------------------------
 log "Cofre (vault padrão, gratuito) e chave careflow-kek (software)"
@@ -288,3 +297,10 @@ mesmo do Cloud Shell:
 
   ssh -i $SSH_KEY ubuntu@$PUBLIC_IP
 EOF
+if [[ "$VM_SIZE" != "${SIZES[0]}" ]]; then
+  cat << EOF
+
+A VM saiu com ${VM_SIZE%%:*} OCPU e ${VM_SIZE##*:} GB porque faltou vaga para a de ${SIZES[0]%%:*} OCPU e ${SIZES[0]##*:} GB. A demonstração roda
+assim, só um pouco mais devagar. Para crescer depois, veja "Crescer a VM" em docs/operacao/demonstracao-hospedada.md.
+EOF
+fi
