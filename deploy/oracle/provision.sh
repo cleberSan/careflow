@@ -108,7 +108,8 @@ echo "VCN, gateway, rota e sub-rede prontos. Entrada só pelas portas 22 e 443."
 if [[ ! -f "$SSH_KEY" ]]; then
   log "Chave SSH em $SSH_KEY"
   mkdir -p "$HOME/.ssh" && chmod 0700 "$HOME/.ssh"
-  ssh-keygen -q -t ed25519 -N "" -C "careflow-cloud-shell" -f "$SSH_KEY"
+  # O Cloud Shell roda em modo FIPS, que recusa ed25519; RSA de 4096 bits é aceito por ele e pela VM.
+  ssh-keygen -q -t rsa -b 4096 -N "" -C "careflow-cloud-shell" -f "$SSH_KEY"
 fi
 
 # --- VM ------------------------------------------------------------------------------------------------------
