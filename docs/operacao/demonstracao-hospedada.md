@@ -41,12 +41,12 @@ A VM grátis vive sem vaga, principalmente em São Paulo, que tem um domínio de
 
 Se nenhuma das duas tiver vaga, o script cria o **robô** `careflow-cacador` e termina. O robô é uma VM mínima, também do Always Free (E2.1.Micro, 1 GB, uns 50 GB de disco), que roda o [`deploy/oracle/a1-hunter.sh`](../../deploy/oracle/a1-hunter.sh):
 
-- tenta criar a VM a cada 5 minutos, nos dois tamanhos, de dia e de noite;
-- quando consegue, ou depois de 7 dias, apaga a própria VM;
+- tenta criar a VM nos dois tamanhos, de dia e de noite, com um minuto de pausa entre as rodadas. Vaga que se libera costuma ser disputada, e um erro de limite de chamadas da Oracle só adia a tentativa para a rodada seguinte. Na VM mínima cada chamada da CLI leva perto de um minuto, então sai uma rodada a cada 2 ou 3 minutos;
+- quando consegue, ou depois de 30 dias, apaga a própria VM;
 - não tem SSH nem porta aberta e não leva chave nenhuma: autentica como instance principal, com permissão só para criar e apagar VMs no compartimento `careflow`;
-- deixa a última tentativa e o resultado nas tags livres da instância dele (**Compute > Instances > careflow-cacador**).
+- deixa a última tentativa e o resultado nas tags livres da instância dele (**Compute > Instances > careflow-cacador**), de 5 em 5 rodadas.
 
-Enquanto o robô trabalha, rodar o mesmo comando de novo só mostra como ele está. Quando a VM existir, o comando apaga o robô se ele ainda estiver lá, tira a permissão dele e termina o resto. Para insistir do próprio Cloud Shell antes de chamar o robô, rode com `CAREFLOW_RETRY_MINUTES=15` na frente do `bash`.
+Enquanto o robô trabalha, rodar o mesmo comando de novo só mostra como ele está. Se o robô no ar for de uma versão anterior (a primeira tentava a cada 5 minutos, por 7 dias), o comando espera ele ser apagado e cria o atual; os dois nunca tentam ao mesmo tempo, para não sair uma segunda VM. Quando a VM existir, o comando apaga o robô se ele ainda estiver lá, tira a permissão dele e termina o resto. Para insistir do próprio Cloud Shell antes de chamar o robô, rode com `CAREFLOW_RETRY_MINUTES=15` na frente do `bash`.
 
 Quando a VM existe, o script mostra e salva em `~/careflow-oracle.env` os dados que o passo 10 pede: o IP, o namespace, o endpoint do vault e o OCID da chave.
 

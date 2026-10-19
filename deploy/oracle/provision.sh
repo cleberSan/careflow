@@ -9,10 +9,10 @@
 # Só cria recursos Always Free, com tamanhos fixos: 2 OCPU e 12 GB na A1 (ou 1 OCPU e 6 GB quando falta vaga para
 # a maior), disco de 100 GB, vault padrão (não o privado, que é pago), chave protegida por software e um bucket
 # Standard. Para antes de criar a VM se a conta já tiver outra instância ou outro disco, para não passar da cota
-# gratuita. Sem vaga para a A1, cria o robô careflow-cacador: uma VM mínima, também gratuita, que segue tentando a
-# cada 5 minutos e se apaga quando consegue (deploy/oracle/a1-hunter.sh). Pode rodar de novo: o que já existe é
-# reaproveitado pelo nome, e com o robô no ar o comando só mostra como ele está. Não pede nem guarda senha, token
-# ou chave privada da conta.
+# gratuita. Sem vaga para a A1, cria o robô careflow-cacador: uma VM mínima, também gratuita, que segue tentando,
+# com um minuto de pausa entre as rodadas, e se apaga quando consegue (deploy/oracle/a1-hunter.sh). Pode rodar de
+# novo: o que já existe é reaproveitado pelo nome, e com o robô no ar o comando só mostra como ele está (ou troca um
+# robô de versão anterior pelo atual). Não pede nem guarda senha, token ou chave privada da conta.
 set -euo pipefail
 
 REF="${CAREFLOW_REF:-main}"
@@ -32,8 +32,10 @@ SUMMARY="$HOME/careflow-oracle.env"
 RETRY_MINUTES="${CAREFLOW_RETRY_MINUTES:-0}"
 HUNTER_NAME="$NAME-cacador"
 HUNTER_SHAPE="VM.Standard.E2.1.Micro"
-HUNTER_DAYS=7
-HUNTER_INTERVAL=300
+HUNTER_DAYS=30
+HUNTER_INTERVAL=60
+# Sobe quando o robô muda (intervalo, prazo, a1-hunter.sh); rodar o comando de novo troca um robô de versão anterior.
+HUNTER_VERSION=2
 [[ "$RETRY_MINUTES" =~ ^[0-9]+$ ]] || { echo "CAREFLOW_RETRY_MINUTES precisa ser um número de minutos." >&2; exit 1; }
 
 log() { printf '\n== %s\n' "$*"; }
@@ -189,7 +191,7 @@ hunter_status() {
   echo "O robô $HUNTER_NAME está tentando criar a VM desde $(local_time "$(jq -r '."time-created"' <<< "$data")")."
   last="$(jq -r '."freeform-tags"."careflow-ultima-tentativa" // empty' <<< "$data")"
   if [[ -n "$last" ]]; then
-    echo "Última rodada: $(local_time "$last"), a de número $(jq -r '."freeform-tags"."careflow-tentativas"' <<< "$data"): $(jq -r '."freeform-tags"."careflow-resultado"' <<< "$data")."
+    echo "Último registro: $(local_time "$last"), na rodada $(jq -r '."freeform-tags"."careflow-tentativas"' <<< "$data"): $(jq -r '."freeform-tags"."careflow-resultado"' <<< "$data")."
   else
     echo "Ele ainda está se preparando; a primeira rodada sai uns 15 minutos depois de criado."
   fi
@@ -227,6 +229,7 @@ write_files:
       USER_DATA_FILE=/etc/careflow-hunter/a1-cloud-init.yaml
       INTERVAL_SECONDS=$HUNTER_INTERVAL
       DEADLINE_EPOCH=$1
+      HUNTER_VERSION=$HUNTER_VERSION
       OCI_CLI_AUTH=instance_principal
   - path: /etc/careflow-hunter/ssh.pub
     permissions: "0644"
@@ -268,7 +271,7 @@ runcmd:
 EOF
 }
 
-# Robô: VM mínima gratuita (E2.1.Micro, 1 GB) que repete a rodada a cada 5 minutos, por até 7 dias, e se apaga
+# Robô: VM mínima gratuita (E2.1.Micro, 1 GB) que repete a rodada com um minuto de pausa, por até 30 dias, e se apaga
 # quando a A1 existe. Autentica como instance principal, com permissão só para criar e apagar VMs no compartimento;
 # a permissão sai quando a A1 existe.
 start_hunter() {
@@ -283,7 +286,8 @@ start_hunter() {
   (($(base64 -w0 < "$user_data" | wc -c) < 30000)) || die "o cloud-init do robô ficou grande demais."
   for ad in "${ads[@]}"; do
     if out="$(o compute instance launch --compartment-id "$COMPARTMENT" --availability-domain "$ad" \
-      --display-name "$HUNTER_NAME" --hostname-label "$HUNTER_NAME" --shape "$HUNTER_SHAPE" \
+      --display-name "$HUNTER_NAME" --shape "$HUNTER_SHAPE" --assign-private-dns-record false \
+      --freeform-tags "{\"careflow-robo-versao\":\"$HUNTER_VERSION\"}" \
       --image-id "$image" --subnet-id "$SUBNET" --assign-public-ip true --user-data-file "$user_data" \
       --wait-for-state RUNNING --max-wait-seconds 1200 --query 'data.id' --raw-output 2>&1)"; then
       HUNTER="$(tail -n1 <<< "$out")"
@@ -307,8 +311,9 @@ start_hunter() {
     ]')"
   cat << EOF
 
-Sem vaga agora, então criei o robô $HUNTER_NAME: uma VM gratuita mínima que tenta criar a VM $NAME a cada
-$((HUNTER_INTERVAL / 60)) minutos, de dia e de noite, por até $HUNTER_DAYS dias, e se apaga sozinha quando consegue.
+Sem vaga agora, então criei o robô $HUNTER_NAME: uma VM gratuita mínima que tenta criar a VM $NAME de novo
+$HUNTER_INTERVAL segundos depois de cada rodada, de dia e de noite, por até $HUNTER_DAYS dias, e se apaga sozinha
+quando consegue. O status dele é gravado de 5 em 5 rodadas.
 
 Pode fechar o Cloud Shell. Para ver como ele está, rode este mesmo comando de novo quando quiser; quando a VM
 existir, o comando termina o resto (cofre, bucket e permissões) e mostra os próximos passos.
@@ -321,15 +326,24 @@ INSTANCE="$FOUND"
 find_instance "$HUNTER_NAME"
 HUNTER="$FOUND"
 if [[ -z "$INSTANCE" && -n "$HUNTER" ]]; then
-  # Um robô que passou do prazo e não conseguiu se apagar dá lugar a um novo.
-  created="$(o compute instance get --instance-id "$HUNTER" --query 'data."time-created"' --raw-output)"
-  if (($(date +%s) - $(date -d "$created" +%s) < HUNTER_DAYS * 86400 + 3600)); then
+  # Um robô de versão anterior, ou que passou do prazo e não conseguiu se apagar, dá lugar a um novo.
+  hunter_data="$(o compute instance get --instance-id "$HUNTER" --query 'data' --output json)"
+  created="$(jq -r '."time-created"' <<< "$hunter_data")"
+  if [[ "$(jq -r '."freeform-tags"."careflow-robo-versao" // "1"' <<< "$hunter_data")" != "$HUNTER_VERSION" ]]; then
+    echo "O robô $HUNTER_NAME é de uma versão anterior; apagando para criar o novo, que insiste mais e por até $HUNTER_DAYS dias."
+  elif (($(date +%s) - $(date -d "$created" +%s) < HUNTER_DAYS * 86400 + 3600)); then
     hunter_status
     exit 0
+  else
+    echo "O robô $HUNTER_NAME passou do prazo; apagando para começar de novo."
   fi
-  echo "O robô $HUNTER_NAME passou do prazo; apagando para começar de novo."
-  o compute instance terminate --instance-id "$HUNTER" --preserve-boot-volume false --force > /dev/null
+  # Espera o robô sumir antes de seguir, para ele e este comando nunca tentarem criar a VM ao mesmo tempo (duas
+  # VMs passariam da cota gratuita). Ele pode ter conseguido a VM nos últimos instantes, então procura de novo.
+  o compute instance terminate --instance-id "$HUNTER" --preserve-boot-volume false --force \
+    --wait-for-state SUCCEEDED --max-wait-seconds 900 > /dev/null
   HUNTER=""
+  find_instance "$NAME"
+  INSTANCE="$FOUND"
 fi
 if [[ -z "$INSTANCE" ]]; then
   # Cota gratuita: até 2 OCPU e 12 GB na A1 e 200 GB de disco somando tudo. Para não passar dela sem perceber,

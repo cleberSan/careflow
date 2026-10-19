@@ -5,6 +5,7 @@
 #                       OCID e sai com 0 quando cria; sai com 3 quando não há vaga e com 1 em qualquer outro erro.
 #   a1-hunter.sh loop   o robô: roda na VM mínima careflow-cacador e repete a rodada a cada INTERVAL_SECONDS até
 #                       criar a A1, achar uma já criada ou passar de DEADLINE_EPOCH. Depois apaga a própria VM.
+#                       HUNTER_VERSION vai junto no status, para o provision.sh saber quando trocar o robô.
 #
 # Nada aqui é segredo: são OCIDs, a chave SSH pública do Cloud Shell e o cloud-init público da A1. No robô, a CLI
 # autentica como instance principal (OCI_CLI_AUTH=instance_principal), com permissão só no compartimento careflow.
@@ -60,11 +61,13 @@ launch_round() {
 }
 
 # --- Robô ------------------------------------------------------------------------------------------------------
-# O status fica nas tags livres desta VM, que o provision.sh mostra quando é rodado de novo.
+# O status fica nas tags livres desta VM, que o provision.sh mostra quando é rodado de novo. As tags são trocadas
+# inteiras, então a versão do robô vai junto.
 report() {
   o compute instance update --instance-id "$SELF" --force --freeform-tags "$(jq -nc \
-    --arg when "$(date -u +%FT%TZ)" --arg attempts "$ATTEMPT" --arg result "$1" \
-    '{"careflow-ultima-tentativa": $when, "careflow-tentativas": $attempts, "careflow-resultado": $result}')" \
+    --arg when "$(date -u +%FT%TZ)" --arg attempts "$ATTEMPT" --arg result "$1" --arg version "${HUNTER_VERSION:-1}" \
+    '{"careflow-ultima-tentativa": $when, "careflow-tentativas": $attempts, "careflow-resultado": $result,
+      "careflow-robo-versao": $version}')" \
     > /dev/null 2>&1 || note "não consegui gravar o status nas tags (a permissão pode estar propagando)."
 }
 
@@ -77,20 +80,25 @@ finish() {
 }
 
 loop() {
-  : "${DEADLINE_EPOCH:?}" "${INTERVAL_SECONDS:=300}"
+  : "${DEADLINE_EPOCH:?}" "${INTERVAL_SECONDS:=300}" "${STATUS_EVERY:=5}"
   SELF="$(curl -fsS --max-time 10 -H 'Authorization: Bearer Oracle' http://169.254.169.254/opc/v2/instance/id)"
   [[ "$SELF" == ocid1.instance.* ]] || { note "não consegui ler o OCID desta VM no serviço de metadados."; exit 1; }
   ATTEMPT=0
   while true; do
-    a1="$(existing_a1 2> /dev/null || true)"
-    [[ -z "$a1" ]] || finish "a VM $NAME existe ($a1)."
+    # Nesta VM mínima cada chamada da CLI leva perto de um minuto (a primeira versão, com quatro chamadas por rodada
+    # e 5 minutos de pausa, fez 163 rodadas em 23 horas). Por isso só as duas tentativas de criar rodam sempre; a
+    # busca por uma A1 criada fora daqui e o status nas tags vão de STATUS_EVERY em STATUS_EVERY rodadas.
+    if ((ATTEMPT % STATUS_EVERY == 0)); then
+      a1="$(existing_a1 2> /dev/null || true)"
+      [[ -z "$a1" ]] || finish "a VM $NAME existe ($a1)."
+    fi
     (($(date +%s) < DEADLINE_EPOCH)) || finish "o prazo acabou sem vaga."
     ATTEMPT=$((ATTEMPT + 1))
     rc=0
     launch_round || rc=$?
     case "$rc" in
       0) finish "VM $NAME criada ($LAUNCHED)." ;;
-      "$NO_CAPACITY") report "sem vaga" ;;
+      "$NO_CAPACITY") (((ATTEMPT - 1) % STATUS_EVERY != 0)) || report "sem vaga" ;;
       # Logo depois de criado, o robô ainda não tem permissão (o IAM leva alguns minutos); tenta de novo.
       *) report "erro: ${LAST_ERROR:0:200}" ;;
     esac
