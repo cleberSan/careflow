@@ -42,7 +42,7 @@ jobs:
           - { name: rights, project: Rights }
           - { name: demo, project: Demo }
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
