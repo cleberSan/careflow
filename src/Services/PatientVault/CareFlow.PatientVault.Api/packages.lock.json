@@ -39,11 +39,11 @@
       },
       "OCI.DotNetSDK.Keymanagement": {
         "type": "Direct",
-        "requested": "[147.1.0, )",
-        "resolved": "147.1.0",
-        "contentHash": "RJPSQeFg+jsdV1bGoS1YyFwGSJkGXyJlKI+n+d3Ncig8EQSNFNVR4/Nx33jCMV1XZcQjJRt9jI7W/aWBTOXldw==",
+        "requested": "[150.0.0, )",
+        "resolved": "150.0.0",
+        "contentHash": "vSfQRs6UtHBg0fSU1y8bZDazDu591d3LYli6NqEm/3PVcY+egQgG2dfuAIIdd3RLoDFoUbk3E/H1SNtCeTr15w==",
         "dependencies": {
-          "OCI.DotNetSDK.Common": "147.1.0"
+          "OCI.DotNetSDK.Common": "150.0.0"
         }
       },
       "Humanizer.Core": {
@@ -225,11 +225,11 @@
       },
       "OCI.DotNetSDK.Common": {
         "type": "Transitive",
-        "resolved": "147.1.0",
-        "contentHash": "m4o0On3IC/hjeGnWVa/7r2+xBZmbgvdH+CmRWP8KW0CjL4+BqV9OnXVfE1aOoxuUKovEELew7w5KM8UXGWsMyA==",
+        "resolved": "150.0.0",
+        "contentHash": "FeWcFmdLwq159RF7h8KbqkJsv4pDv0u9gYCLvKGobJOjWcmMhkPBe56Rmv1YdVreFagEEjnpWvm7V5vrcoThlA==",
         "dependencies": {
           "NLog": "4.7.2",
-          "Newtonsoft.Json": "12.0.3",
+          "Newtonsoft.Json": "13.0.4",
           "Polly": "7.2.0",
           "Portable.BouncyCastle": "1.9.0",
           "System.ComponentModel.Annotations": "4.7.0",
