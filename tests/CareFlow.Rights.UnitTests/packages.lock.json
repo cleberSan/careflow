@@ -27,9 +27,9 @@
       },
       "Hl7.Fhir.Specification.Data.R4": {
         "type": "Direct",
-        "requested": "[6.7.0, )",
-        "resolved": "6.7.0",
-        "contentHash": "arZAsT0aCDo9v/G8gO81lZHCrO7wATVNbB9jkR8iILJ++HVOHpxnrTXMnFw5IANJo11ggoO2+heMEOdh0WUB4Q=="
+        "requested": "[6.8.0, )",
+        "resolved": "6.8.0",
+        "contentHash": "BElXBieCWMArOe7o03aU8bPF3Dw53PQMGBzacldWGEP3VAHWvUlrmoefBRD2GasmooU2n83y97lXqIksIuMHSQ=="
       },
       "xunit.v3": {
         "type": "Direct",
@@ -68,8 +68,8 @@
       },
       "Hl7.Fhir.Base": {
         "type": "Transitive",
-        "resolved": "6.7.0",
-        "contentHash": "6TYs6hBnrQdfjivQL2dc/TFVbR9P9QklPgOiC85iZCT+aJ+/d416VoU4Yrt3TklO1gMXjjImveypWES34koZqQ==",
+        "resolved": "6.8.0",
+        "contentHash": "0EgvzJLIiT0/Jo9GvWMrqFUjIE+UVTgpu5TczUr39YF/qltC30yNovYwQBQUSCz0lGPWBe8kcEPiCvzA2+fU/g==",
         "dependencies": {
           "Fhir.Metrics": "1.4.0",
           "Microsoft.Extensions.Caching.Memory": "10.0.9",
@@ -79,10 +79,10 @@
       },
       "Hl7.Fhir.Conformance": {
         "type": "Transitive",
-        "resolved": "6.7.0",
-        "contentHash": "HXlrbVcMlwuOmUWxH1j1uNNf0Qs3E4KCbtJrysKoL2ksdvWalnqeN/GC2+VUFXipPUfNCula5fQ8LKMioDlNag==",
+        "resolved": "6.8.0",
+        "contentHash": "5qqcuGF0jm1yW1FaDJdxRzKGOwEkn+b4LT1IYbgtP9zzZMXYhZ0nHFZy8Cz9TwvxOOQmw5VixGfCMCVUsDog5g==",
         "dependencies": {
-          "Hl7.Fhir.Base": "6.7.0"
+          "Hl7.Fhir.Base": "6.8.0"
         }
       },
       "MessagePack.Annotations": {
@@ -597,7 +597,7 @@
           "CareFlow.BuildingBlocks.Messaging": "[1.0.0, )",
           "CareFlow.BuildingBlocks.Persistence": "[1.0.0, )",
           "CareFlow.Rights.Domain": "[1.0.0, )",
-          "Hl7.Fhir.R4": "[6.7.0, )",
+          "Hl7.Fhir.R4": "[6.8.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.13, )"
         }
@@ -610,11 +610,11 @@
       },
       "Hl7.Fhir.R4": {
         "type": "CentralTransitive",
-        "requested": "[6.7.0, )",
-        "resolved": "6.7.0",
-        "contentHash": "LN9YLVQUaryQaGU019xWbuxgah1hcJ/ky8ZBDbXs5RoNgQZe5BPeCJtQ0jWrCJ/ur0WWpshk4AioakjHelnhiQ==",
+        "requested": "[6.8.0, )",
+        "resolved": "6.8.0",
+        "contentHash": "035L7rdwPDzkKbd6aiDMVko6lGzqys+w+h6Iwmpqna3dsC4HUeDUV49mhtBQxfkUH8KuQzxOd4h+i9hNuIEbgg==",
         "dependencies": {
-          "Hl7.Fhir.Conformance": "6.7.0"
+          "Hl7.Fhir.Conformance": "6.8.0"
         }
       },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {
