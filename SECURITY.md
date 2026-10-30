@@ -12,4 +12,4 @@ O CareFlow é um projeto de demonstração e trabalha **somente com dados sinté
 
 - Segredos nunca são versionados; em nuvem, ficam em cofre de segredos (Azure Key Vault ou AWS Secrets Manager).
 - Análise estática com CodeQL e revisão de dependências em todo PR.
-- Atualizações de dependências semanais via Dependabot.
+- Atualizações de dependências mensais e agrupadas via Dependabot, com cooldown de 7 dias; correções de segurança chegam na hora ([ADR-0014](docs/adr/0014-atualizacao-de-dependencias-sem-auto-merge.md)).

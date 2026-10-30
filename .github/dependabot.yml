@@ -1,18 +1,39 @@
+# Política de atualização: docs/adr/0014-atualizacao-de-dependencias-sem-auto-merge.md.
+# Versão nova só vira PR depois de 7 dias publicada (cooldown). Correção de segurança não espera.
+# Sem auto-merge por enquanto: o Dependabot não atualiza o packages.lock.json dos projetos que recebem o pacote
+# por referência a outro projeto, e o restore travado do CI recusa o PR (NU1004). Ver o ADR.
 version: 2
 updates:
   - package-ecosystem: nuget
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+      time: "05:00"
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 7
     groups:
+      # Pacotes que precisam andar na mesma versão, em qualquer tipo de atualização.
+      opentelemetry:
+        patterns: ["OpenTelemetry*"]
+      fhir:
+        patterns: ["Hl7.Fhir*", "Firely.*"]
       testes:
-        patterns: ["xunit*", "coverlet*"]
+        patterns: ["xunit*", "coverlet*", "Testcontainers*", "Microsoft.AspNetCore.Mvc.Testing"]
+      # ASP.NET Core, EF Core e Npgsql acompanham o patch mensal do .NET 10. Major é troca de runtime e vem à parte.
+      dotnet:
+        patterns: ["Microsoft.*", "Npgsql*"]
+        update-types: [minor, patch]
     open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+      time: "05:00"
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
