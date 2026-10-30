@@ -32,7 +32,7 @@ jobs:
       name: production
       url: https://${{ vars.CAREFLOW_DEMO_HOST }}/demo/v1/status
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -87,7 +87,7 @@ jobs:
       - name: Deploy na VM (volta sozinho se não ficar saudável)
         run: ssh careflow "deploy ${{ steps.target.outputs.commit }}"
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
