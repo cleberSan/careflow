@@ -1,6 +1,6 @@
 # ADR-0015: Especificar antes de implementar (Spec-Driven Development)
 
-- Status: proposto
+- Status: aceito
 - Data: 2026-11-04
 
 ## Contexto
@@ -12,7 +12,7 @@ Em 2026-11-04 Cleber decidiu adotar Spec-Driven Development em todos os reposit�
 ## Decisão
 
 - **Specs em `docs/specs/NNNN-titulo/`**, ao lado dos ADRs: `spec.md` (o quê e por quê), `plano.md` (como) e `tarefas.md` (em que ordem), conforme [docs/specs/README.md](../specs/README.md).
-- **Nível completo, com a spec aprovada por Cleber antes do código,** quando a mudança é uma fase do roadmap; cria ou altera rota, escopo, evento de integração, schema ou migration; toca dado pessoal, cofre, consentimento, auditoria, RLS, retenção ou direitos do titular; muda instruções, schema ou mascaramento da triagem (ADR-0011); envolve o portfolio-web; ou traz pacote, serviço, custo ou licença novos.
+- **Nível completo, com a spec aprovada por Cleber antes do código** (decisão de Cleber em 2026-11-04: o portão vale só neste nível), quando a mudança é uma fase do roadmap; cria ou altera rota, escopo, evento de integração, schema ou migration; toca dado pessoal, cofre, consentimento, auditoria, RLS, retenção ou direitos do titular; muda instruções, schema ou mascaramento da triagem (ADR-0011); envolve o portfolio-web; ou traz pacote, serviço, custo ou licença novos.
 - **Nível leve** (só `spec.md`) para mudança pequena de comportamento sem esses gatilhos; **direto** (só o PR) para atualização de dependência (ADR-0014), documentação, refatoração e bug com causa clara, em que o teste de regressão é a spec.
 - **Critérios de aceite `CA-NN`** em EARS; o teste xUnit que prova cada um leva o comentário `// spec NNNN CA-NN` logo acima do `[Fact]` ou `[Theory]`.
 - **Spec por mudança:** depois de `implementada`, só o status muda; comportamento novo ganha spec nova. ADRs continuam imutáveis, e a spec cita os que a restringem.
