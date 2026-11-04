@@ -10,7 +10,7 @@ Plataforma multi-clínica de agendamento e triagem assistida por IA, com **priva
 
 ## Por que este projeto existe
 
-O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em fases públicas, e cada decisão fica registrada em [ADRs](docs/adr), para mostrar não só o resultado, mas o fluxo de engenharia: segurança, testes, observabilidade e resiliência desde o primeiro commit.
+O CareFlow é o projeto vitrine do portfólio de Cleber. Ele é construído em fases públicas, cada decisão fica registrada em [ADRs](docs/adr) e cada mudança grande começa por uma [spec](docs/specs) revisada antes do código, para mostrar não só o resultado, mas o fluxo de engenharia: segurança, testes, observabilidade e resiliência desde o primeiro commit.
 
 ## Arquitetura alvo
 

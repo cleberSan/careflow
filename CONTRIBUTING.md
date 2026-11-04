@@ -3,9 +3,10 @@
 ## Fluxo
 
 1. Crie uma branch a partir de `main` (`feat/...`, `fix/...`, `chore/...`, `docs/...`).
-2. Use [Conventional Commits](https://www.conventionalcommits.org/pt-br/) nas mensagens.
-3. Abra um PR usando o template; o CI precisa estar verde.
-4. Decisões arquiteturais entram como ADR em `docs/adr/`.
+2. Mudança que não é trivial começa por uma spec em `docs/specs/` ([quando e como](docs/specs/README.md), ADR-0015). No nível completo (fase, rota, evento, migration, dado pessoal), o código só vem depois de a spec ser aprovada.
+3. Use [Conventional Commits](https://www.conventionalcommits.org/pt-br/) nas mensagens.
+4. Abra um PR usando o template, com o link para a spec; o CI precisa estar verde.
+5. Decisões arquiteturais entram como ADR em `docs/adr/`.
 
 ## Rodando localmente
 
